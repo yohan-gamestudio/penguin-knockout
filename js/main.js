@@ -400,6 +400,7 @@ network.onDisconnected = () => {
 
 network.onReconnectSuccess = (data) => {
     ui.hideReconnectBanner();
+    playerName = data.myName || '';
 
     if (data.state === 'lobby') {
         ui.showLobby(data.roomCode);

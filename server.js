@@ -209,7 +209,8 @@ io.on('connection', (socket) => {
             round: room.round,
             players: playerList,
             hostId: room.hostId,
-            myPenguinIndex: player.penguinIndex
+            myPenguinIndex: player.penguinIndex,
+            myName: player.name
         });
 
         broadcastRoomUpdate(session.roomCode);
