@@ -39,11 +39,11 @@ export class PhysicsWorld {
 
     createPlatformBody() {
         // Static cylinder for the ice platform
-        const shape = new CANNON.Cylinder(PLATFORM_RADIUS, PLATFORM_RADIUS, 1, 32);
+        const shape = new CANNON.Cylinder(PLATFORM_RADIUS, PLATFORM_RADIUS, 0.05, 32);
         this.platformBody = new CANNON.Body({
             mass: 0,
             shape: shape,
-            position: new CANNON.Vec3(0, -0.5, 0),
+            position: new CANNON.Vec3(0, -0.025, 0),
             material: this.iceMaterial
         });
         this.world.addBody(this.platformBody);
