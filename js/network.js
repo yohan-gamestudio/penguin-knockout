@@ -100,6 +100,13 @@ export class NetworkManager {
         this.socket.emit('return-to-lobby');
     }
 
+    leaveRoom() {
+        this.socket.emit('leave-room');
+        this.roomCode = null;
+        this.isHost = false;
+        this.myPenguinIndex = -1;
+    }
+
     isConnected() {
         return this.socket && this.socket.connected;
     }

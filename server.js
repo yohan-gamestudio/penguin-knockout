@@ -199,6 +199,28 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('leave-room', () => {
+        if (!currentRoom) return;
+        const room = rooms.get(currentRoom);
+        if (!room) return;
+
+        socket.leave(currentRoom);
+        room.players.delete(socket.id);
+
+        if (room.players.size === 0) {
+            rooms.delete(currentRoom);
+            console.log(`Room ${currentRoom} deleted (empty)`);
+        } else {
+            if (room.hostId === socket.id) {
+                room.hostId = room.players.keys().next().value;
+            }
+            broadcastRoomUpdate(currentRoom);
+        }
+
+        currentRoom = null;
+        console.log(`Player ${socket.id} left room`);
+    });
+
     socket.on('return-to-lobby', () => {
         if (!currentRoom) return;
         const room = rooms.get(currentRoom);

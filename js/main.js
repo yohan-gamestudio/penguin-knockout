@@ -224,6 +224,11 @@ ui.onReady = () => {
     network.toggleReady();
 };
 
+ui.onLeaveRoom = () => {
+    network.leaveRoom();
+    ui.showRoomScreen();
+};
+
 ui.onReturnToLobby = () => {
     network.returnToLobby();
 };

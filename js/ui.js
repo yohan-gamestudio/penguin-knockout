@@ -33,6 +33,7 @@ export class UIManager {
         this.lobbyRoomCode = document.getElementById('lobby-room-code');
         this.lobbyPlayerList = document.getElementById('lobby-player-list');
         this.readyBtn = document.getElementById('ready-btn');
+        this.leaveRoomBtn = document.getElementById('leave-room-btn');
         this.returnLobbyBtn = document.getElementById('return-lobby-btn');
 
         this.powerSlider.addEventListener('input', () => {
@@ -49,6 +50,7 @@ export class UIManager {
         this.onCreateRoom = null;
         this.onJoinRoom = null;
         this.onReady = null;
+        this.onLeaveRoom = null;
         this.onReturnToLobby = null;
 
         // Event listeners
@@ -90,6 +92,10 @@ export class UIManager {
 
         this.readyBtn.addEventListener('click', () => {
             if (this.onReady) this.onReady();
+        });
+
+        this.leaveRoomBtn.addEventListener('click', () => {
+            if (this.onLeaveRoom) this.onLeaveRoom();
         });
 
         this.returnLobbyBtn.addEventListener('click', () => {
