@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🐧 펭귄 알까기 - Penguin Knockout</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0a2e; font-family: 'Segoe UI', sans-serif; }
+        #canvas { display: block; width: 100vw; height: 100vh; }
+
+        /* HUD */
+        #hud { position: fixed; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 10; color: white; }
+        #top-bar { display: flex; justify-content: space-between; padding: 16px 24px; font-size: 1.1em;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+
+        /* Bottom controls - visible during AIMING */
+        #bottom-controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 10; }
+
+        /* Power slider */
+        #power-section { display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.6);
+            padding: 12px 24px; border-radius: 12px; backdrop-filter: blur(8px); }
+        #power-label { color: white; font-size: 1.1em; min-width: 80px; text-align: center; }
+        #power-slider { width: 200px; height: 8px; -webkit-appearance: none; appearance: none;
+            background: linear-gradient(to right, #33cc33, #ffcc00, #ff3333); border-radius: 4px;
+            outline: none; cursor: pointer; pointer-events: auto; }
+        #power-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px;
+            background: white; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+
+        /* Launch button */
+        #launch-btn { padding: 14px 48px; font-size: 1.4em; font-weight: bold; border: none;
+            border-radius: 12px; cursor: pointer; pointer-events: auto;
+            background: linear-gradient(135deg, #ff4444, #ff6644); color: white;
+            box-shadow: 0 4px 15px rgba(255,68,68,0.4); transition: transform 0.1s, box-shadow 0.1s; }
+        #launch-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(255,68,68,0.6); }
+        #launch-btn:active { transform: scale(0.95); }
+
+        /* Direction hint */
+        #aim-hint { color: rgba(255,255,255,0.7); font-size: 0.9em; text-align: center; }
+
+        /* Screen overlays */
+        .screen-overlay { position: fixed; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; background: rgba(0,0,0,0.75);
+            color: white; z-index: 20; backdrop-filter: blur(4px); }
+        .screen-overlay h1 { font-size: 3.5em; margin-bottom: 0.3em; }
+        .screen-overlay p { font-size: 1.2em; margin-bottom: 2em; opacity: 0.8; }
+        .screen-overlay button { padding: 16px 56px; font-size: 1.3em; border: none;
+            border-radius: 10px; cursor: pointer; background: #4488ff; color: white;
+            box-shadow: 0 4px 15px rgba(68,136,255,0.4); transition: transform 0.1s; }
+        .screen-overlay button:hover { transform: scale(1.05); background: #5599ff; }
+
+        .hidden { display: none !important; }
+
+        /* Round banner */
+        #round-banner { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 3em; font-weight: bold; color: white; text-shadow: 0 4px 12px rgba(0,0,0,0.8);
+            z-index: 15; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        #round-banner.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <!-- Menu -->
+    <div id="menu-screen" class="screen-overlay">
+        <h1>🐧 펭귄 알까기</h1>
+        <p>빙판 위에서 펭귄을 튕겨 상대를 밀어내자!</p>
+        <button id="start-btn">게임 시작</button>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+        <div id="top-bar">
+            <span id="round-display">라운드 1</span>
+            <span id="alive-display">🐧 x4</span>
+        </div>
+    </div>
+
+    <!-- Bottom Controls (aiming phase) -->
+    <div id="bottom-controls" class="hidden">
+        <div id="aim-hint">드래그로 방향을 정하세요</div>
+        <div id="power-section">
+            <span id="power-label">강도: 5</span>
+            <input type="range" id="power-slider" min="1" max="10" value="5" step="1">
+        </div>
+        <button id="launch-btn">🚀 발사!</button>
+    </div>
+
+    <!-- Round Banner -->
+    <div id="round-banner"></div>
+
+    <!-- Game Over -->
+    <div id="gameover-screen" class="screen-overlay hidden">
+        <h1 id="gameover-title">🏆 승리!</h1>
+        <p id="gameover-subtitle"></p>
+        <button id="restart-btn">다시 하기</button>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+            "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+        }
+    }
+    </script>
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>
