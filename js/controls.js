@@ -18,8 +18,14 @@ export class AimControls {
 
         this._createArrowVisual();
 
+        this.isDragging = false;
+
         this._boundPointerDown = this._onPointerDown.bind(this);
+        this._boundPointerMove = this._onPointerMove.bind(this);
+        this._boundPointerUp = this._onPointerUp.bind(this);
         canvas.addEventListener('pointerdown', this._boundPointerDown);
+        canvas.addEventListener('pointermove', this._boundPointerMove);
+        canvas.addEventListener('pointerup', this._boundPointerUp);
     }
 
     _createArrowVisual() {
@@ -76,9 +82,15 @@ export class AimControls {
 
     _onPointerDown(e) {
         if (!this.enabled) return;
+        this.isDragging = true;
+        this.startWorld = this._screenToWorld(e.clientX, e.clientY);
+    }
 
-        const clickWorld = this._screenToWorld(e.clientX, e.clientY);
-        const dir = new THREE.Vector3().subVectors(clickWorld, this.playerPenguinPosition);
+    _onPointerMove(e) {
+        if (!this.enabled || !this.isDragging) return;
+        const currentWorld = this._screenToWorld(e.clientX, e.clientY);
+        // 드래그 방향 = 이동 방향 (시작점 → 현재점)
+        const dir = new THREE.Vector3().subVectors(currentWorld, this.startWorld);
         dir.y = 0;
 
         if (dir.length() > 0.3) {
@@ -86,6 +98,11 @@ export class AimControls {
             this.hasAim = true;
             this._updateArrow();
         }
+    }
+
+    _onPointerUp(e) {
+        if (!this.enabled) return;
+        this.isDragging = false;
     }
 
     _updateArrow() {
@@ -111,6 +128,8 @@ export class AimControls {
 
     dispose() {
         this.canvas.removeEventListener('pointerdown', this._boundPointerDown);
+        this.canvas.removeEventListener('pointermove', this._boundPointerMove);
+        this.canvas.removeEventListener('pointerup', this._boundPointerUp);
 
         if (this.arrowHelper) {
             this.scene.remove(this.arrowHelper);

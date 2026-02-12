@@ -134,7 +134,7 @@ export class UIManager {
         this.bottomControls.classList.remove('hidden');
         this.roundDisplay.textContent = `라운드 ${round}`;
         this.aliveDisplay.textContent = `🐧 x${aliveCount}`;
-        this.aimHint.textContent = '클릭으로 방향을 정하세요';
+        this.aimHint.textContent = '드래그하여 방향을 정하세요';
     }
 
     showSliding(round, aliveCount) {
@@ -178,7 +178,7 @@ export class UIManager {
         if (hasAim) {
             this.aimHint.textContent = '방향 설정 완료! 강도를 정하고 발사!';
         } else {
-            this.aimHint.textContent = '클릭으로 방향을 정하세요';
+            this.aimHint.textContent = '드래그하여 방향을 정하세요';
         }
     }
 
