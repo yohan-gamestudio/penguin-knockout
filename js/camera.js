@@ -10,12 +10,24 @@ export class CameraRig {
         // Set initial position
         this.camera.position.copy(this.targetPosition);
         this.camera.lookAt(this.targetLookAt);
-        this.camera.fov = 45;
+        this.updateFovForAspect();
+    }
+
+    isPortrait() {
+        return this.camera.aspect < 1;
+    }
+
+    updateFovForAspect() {
+        this.camera.fov = this.isPortrait() ? 60 : 45;
         this.camera.updateProjectionMatrix();
     }
 
     setOverview() {
-        this.targetPosition.set(0, 22, 18);
+        if (this.isPortrait()) {
+            this.targetPosition.set(0, 28, 22);
+        } else {
+            this.targetPosition.set(0, 22, 18);
+        }
         this.targetLookAt.set(0, 0, 0);
     }
 
@@ -25,8 +37,6 @@ export class CameraRig {
             return;
         }
 
-        // Calculate centroid of all penguins
-        // Accepts either mesh objects (with .position) or penguin objects (with .mesh.position)
         const centroid = new THREE.Vector3();
         let count = 0;
 
@@ -41,11 +51,11 @@ export class CameraRig {
         if (count > 0) {
             centroid.divideScalar(count);
 
-            // Position camera to look at centroid from elevated angle
             this.targetLookAt.copy(centroid);
 
-            // Camera offset from centroid
-            const offset = new THREE.Vector3(0, 18, 14);
+            const offset = this.isPortrait()
+                ? new THREE.Vector3(0, 24, 18)
+                : new THREE.Vector3(0, 18, 14);
             this.targetPosition.copy(centroid).add(offset);
         } else {
             this.setOverview();

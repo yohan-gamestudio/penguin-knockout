@@ -321,7 +321,7 @@ function gameLoop() {
 
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    cameraRig.updateFovForAspect();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
