@@ -8,44 +8,40 @@ export class AimControls {
         this.raycaster = new THREE.Raycaster();
         this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y=0 plane
 
-        this.isDragging = false;
-        this.startScreen = new THREE.Vector2();
-        this.currentScreen = new THREE.Vector2();
-        this.startWorld = new THREE.Vector3();
-        this.currentWorld = new THREE.Vector3();
-
-        this.aimDirection = new THREE.Vector3(0, 0, -1); // normalized XZ direction
+        this.aimDirection = new THREE.Vector3(0, 0, -1);
         this.hasAim = false;
 
         this.arrowHelper = null;
         this.playerPenguinPosition = new THREE.Vector3();
         this.enabled = false;
+        this.powerLevel = 5;
 
-        // Create visual arrow
         this._createArrowVisual();
 
-        // Bind events
         this._boundPointerDown = this._onPointerDown.bind(this);
-        this._boundPointerMove = this._onPointerMove.bind(this);
-        this._boundPointerUp = this._onPointerUp.bind(this);
-
         canvas.addEventListener('pointerdown', this._boundPointerDown);
-        canvas.addEventListener('pointermove', this._boundPointerMove);
-        canvas.addEventListener('pointerup', this._boundPointerUp);
     }
 
     _createArrowVisual() {
-        // Create a thick arrow using ArrowHelper
         const dir = new THREE.Vector3(0, 0, -1);
         const origin = new THREE.Vector3(0, 0.8, 0);
-        this.arrowHelper = new THREE.ArrowHelper(dir, origin, 3, 0x00ff44, 0.6, 0.3);
+        this.arrowHelper = new THREE.ArrowHelper(dir, origin, 3, 0x111111, 0.8, 0.5);
         this.arrowHelper.visible = false;
+        // Make the arrow thicker
+        this.arrowHelper.line.material.linewidth = 3;
         this.scene.add(this.arrowHelper);
     }
 
     setPlayerPosition(pos) {
         this.playerPenguinPosition.copy(pos);
         this.arrowHelper.position.set(pos.x, 0.8, pos.z);
+    }
+
+    setPower(power) {
+        this.powerLevel = power;
+        if (this.hasAim) {
+            this._updateArrow();
+        }
     }
 
     enable() {
@@ -55,12 +51,14 @@ export class AimControls {
 
     disable() {
         this.enabled = false;
+        // 화살표는 숨기지 않음 - 발사 후에도 유지
+    }
+
+    hideArrow() {
         this.arrowHelper.visible = false;
-        this.isDragging = false;
     }
 
     _screenToWorld(screenX, screenY) {
-        // Convert screen coordinates to world coordinates on the ground plane
         const rect = this.canvas.getBoundingClientRect();
         const x = screenX - rect.left;
         const y = screenY - rect.top;
@@ -78,58 +76,42 @@ export class AimControls {
 
     _onPointerDown(e) {
         if (!this.enabled) return;
-        this.isDragging = true;
-        this.startScreen.set(e.clientX, e.clientY);
-        this.startWorld = this._screenToWorld(e.clientX, e.clientY);
-    }
 
-    _onPointerMove(e) {
-        if (!this.enabled || !this.isDragging) return;
-        this.currentScreen.set(e.clientX, e.clientY);
-        this.currentWorld = this._screenToWorld(e.clientX, e.clientY);
+        const clickWorld = this._screenToWorld(e.clientX, e.clientY);
+        const dir = new THREE.Vector3().subVectors(clickWorld, this.playerPenguinPosition);
+        dir.y = 0;
 
-        // Direction is OPPOSITE of drag (slingshot pull-back mechanic)
-        const dragDir = new THREE.Vector3().subVectors(this.startWorld, this.currentWorld);
-        dragDir.y = 0;
-
-        if (dragDir.length() > 0.3) {
-            this.aimDirection.copy(dragDir).normalize();
+        if (dir.length() > 0.3) {
+            this.aimDirection.copy(dir).normalize();
             this.hasAim = true;
-
-            this.arrowHelper.visible = true;
-            this.arrowHelper.setDirection(this.aimDirection);
-            this.arrowHelper.setLength(3, 0.6, 0.3);
-            this.arrowHelper.setColor(0x00ff44);
-        } else {
-            this.arrowHelper.visible = false;
-            this.hasAim = false;
+            this._updateArrow();
         }
     }
 
-    _onPointerUp(e) {
-        if (!this.enabled) return;
-        this.isDragging = false;
-        // Keep the arrow visible showing final aim direction
+    _updateArrow() {
+        // 화살표 길이: 파워에 비례 (1~10 → 1.5~6)
+        const length = 1.5 + (this.powerLevel / 10) * 4.5;
+        const headLength = Math.max(0.5, length * 0.2);
+        const headWidth = 0.5;
+
+        this.arrowHelper.visible = true;
+        this.arrowHelper.setDirection(this.aimDirection);
+        this.arrowHelper.setLength(length, headLength, headWidth);
+        this.arrowHelper.setColor(0x111111);
     }
 
     getAimDirection() {
-        // Returns {x, z} normalized direction
         return { x: this.aimDirection.x, z: this.aimDirection.z };
     }
 
     reset() {
         this.hasAim = false;
-        this.isDragging = false;
         this.arrowHelper.visible = false;
     }
 
     dispose() {
-        // Clean up event listeners
         this.canvas.removeEventListener('pointerdown', this._boundPointerDown);
-        this.canvas.removeEventListener('pointermove', this._boundPointerMove);
-        this.canvas.removeEventListener('pointerup', this._boundPointerUp);
 
-        // Clean up scene objects
         if (this.arrowHelper) {
             this.scene.remove(this.arrowHelper);
             this.arrowHelper.dispose();

@@ -37,8 +37,10 @@ export class UIManager {
         this.returnLobbyBtn = document.getElementById('return-lobby-btn');
         this.reconnectBanner = document.getElementById('reconnect-banner');
 
+        this.onPowerChange = null;
         this.powerSlider.addEventListener('input', () => {
             this.powerLabel.textContent = `강도: ${this.powerSlider.value}`;
+            if (this.onPowerChange) this.onPowerChange(parseInt(this.powerSlider.value));
         });
 
         // Existing callbacks
@@ -132,7 +134,7 @@ export class UIManager {
         this.bottomControls.classList.remove('hidden');
         this.roundDisplay.textContent = `라운드 ${round}`;
         this.aliveDisplay.textContent = `🐧 x${aliveCount}`;
-        this.aimHint.textContent = '드래그로 방향을 정하세요';
+        this.aimHint.textContent = '클릭으로 방향을 정하세요';
     }
 
     showSliding(round, aliveCount) {
@@ -176,7 +178,7 @@ export class UIManager {
         if (hasAim) {
             this.aimHint.textContent = '방향 설정 완료! 강도를 정하고 발사!';
         } else {
-            this.aimHint.textContent = '드래그로 방향을 정하세요';
+            this.aimHint.textContent = '클릭으로 방향을 정하세요';
         }
     }
 

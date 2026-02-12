@@ -145,11 +145,13 @@ gameState.onStateChange = (newState, oldState) => {
             ui.showSliding(gameState.round, aliveCount);
             cameraRig.setOverview();
             controls.disable();
+            controls.hideArrow();
             break;
 
         case States.AIMING: {
             const alive = gameState.getAlivePenguins();
             ui.showAiming(gameState.round, alive.length);
+            controls.setPower(ui.getPowerLevel());
             if (!gameState.multiplayer) {
                 const player = penguins.find(p => p.isPlayer && p.alive);
                 if (player) {
@@ -237,6 +239,10 @@ ui.onStart = () => {
     const allPenguins = createAllPenguins();
     gameState.multiplayer = false;
     gameState.startGame(allPenguins);
+};
+
+ui.onPowerChange = (power) => {
+    controls.setPower(power);
 };
 
 ui.onLaunch = () => {
