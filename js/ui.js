@@ -25,10 +25,20 @@ export class UIManager {
         this.nameSubmitBtn = document.getElementById('name-submit-btn');
         this.roomScreen = document.getElementById('room-screen');
         this.createRoomBtn = document.getElementById('create-room-btn');
+        this.createPasswordInput = document.getElementById('create-password-input');
         this.roomCodeInput = document.getElementById('room-code-input');
+        this.joinPasswordInput = document.getElementById('join-password-input');
         this.joinRoomBtn = document.getElementById('join-room-btn');
         this.roomBackBtn = document.getElementById('room-back-btn');
         this.roomError = document.getElementById('room-error');
+        this.roomListEl = document.getElementById('room-list');
+
+        // Password modal elements
+        this.passwordModal = document.getElementById('password-modal');
+        this.modalPasswordInput = document.getElementById('modal-password-input');
+        this.modalPasswordSubmit = document.getElementById('modal-password-submit');
+        this.modalPasswordCancel = document.getElementById('modal-password-cancel');
+        this._pendingJoinCode = null;
         this.lobbyScreen = document.getElementById('lobby-screen');
         this.lobbyRoomCode = document.getElementById('lobby-room-code');
         this.lobbyPlayerList = document.getElementById('lobby-player-list');
@@ -56,6 +66,7 @@ export class UIManager {
         this.onReady = null;
         this.onLeaveRoom = null;
         this.onReturnToLobby = null;
+        this.onJoinRoomFromList = null;
 
         // Event listeners
         this.startBtn.addEventListener('click', () => { if (this.onStart) this.onStart(); });
@@ -75,18 +86,43 @@ export class UIManager {
         });
 
         this.createRoomBtn.addEventListener('click', () => {
-            if (this.onCreateRoom) this.onCreateRoom();
+            const password = this.createPasswordInput.value.trim();
+            if (this.onCreateRoom) this.onCreateRoom(password || null);
         });
 
         this.joinRoomBtn.addEventListener('click', () => {
             const code = this.roomCodeInput.value.trim();
-            if (code && this.onJoinRoom) this.onJoinRoom(code);
+            const password = this.joinPasswordInput.value.trim();
+            if (code && this.onJoinRoom) this.onJoinRoom(code, password || null);
         });
 
         this.roomCodeInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const code = this.roomCodeInput.value.trim();
-                if (code && this.onJoinRoom) this.onJoinRoom(code);
+                const password = this.joinPasswordInput.value.trim();
+                if (code && this.onJoinRoom) this.onJoinRoom(code, password || null);
+            }
+        });
+
+        this.modalPasswordSubmit.addEventListener('click', () => {
+            const password = this.modalPasswordInput.value.trim();
+            if (this._pendingJoinCode && this.onJoinRoom) {
+                this.onJoinRoom(this._pendingJoinCode, password || null);
+            }
+            this.hidePasswordModal();
+        });
+
+        this.modalPasswordCancel.addEventListener('click', () => {
+            this.hidePasswordModal();
+        });
+
+        this.modalPasswordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const password = this.modalPasswordInput.value.trim();
+                if (this._pendingJoinCode && this.onJoinRoom) {
+                    this.onJoinRoom(this._pendingJoinCode, password || null);
+                }
+                this.hidePasswordModal();
             }
         });
 
@@ -129,18 +165,18 @@ export class UIManager {
         this.gameoverScreen.classList.add('hidden');
     }
 
-    showAiming(round, aliveCount) {
+    showAiming(round, aliveCount, isMultiplayer = false) {
         this.hideAllScreens();
         this.hudElement.classList.remove('hidden');
         this.bottomControls.classList.remove('hidden');
-        this.roundDisplay.textContent = `라운드 ${round}`;
+        this.roundDisplay.textContent = isMultiplayer ? `라운드 ${round}/10` : `라운드 ${round}`;
         this.aliveDisplay.textContent = `🐧 x${aliveCount}`;
         this.aimHint.textContent = '드래그하여 방향을 정하세요';
     }
 
-    showSliding(round, aliveCount) {
+    showSliding(round, aliveCount, isMultiplayer = false) {
         this.bottomControls.classList.add('hidden');
-        this.roundDisplay.textContent = `라운드 ${round}`;
+        this.roundDisplay.textContent = isMultiplayer ? `라운드 ${round}/10` : `라운드 ${round}`;
         this.aliveDisplay.textContent = `🐧 x${aliveCount}`;
     }
 
@@ -152,10 +188,13 @@ export class UIManager {
         }, 1200);
     }
 
-    showGameOver(playerWon, winnerName = null, isMultiplayer = false, rankings = null) {
+    showGameOver(playerWon, winnerName = null, isMultiplayer = false, rankings = null, maxRounds = false) {
         this.hideAllScreens();
         this.gameoverScreen.classList.remove('hidden');
-        if (playerWon) {
+        if (maxRounds) {
+            this.gameoverTitle.textContent = '⏰ 10라운드 종료!';
+            this.gameoverSubtitle.textContent = '최대 라운드에 도달했습니다';
+        } else if (playerWon) {
             this.gameoverTitle.textContent = '🏆 승리!';
             this.gameoverSubtitle.textContent = '모든 상대 펭귄을 밀어냈습니다!';
         } else {
@@ -207,6 +246,7 @@ export class UIManager {
         this.gameoverScreen.classList.add('hidden');
         this.hudElement.classList.add('hidden');
         this.bottomControls.classList.add('hidden');
+        this.passwordModal.classList.add('hidden');
     }
 
     showNameScreen() {
@@ -220,6 +260,8 @@ export class UIManager {
         this.hideAllScreens();
         this.roomScreen.classList.remove('hidden');
         this.roomCodeInput.value = '';
+        this.joinPasswordInput.value = '';
+        this.createPasswordInput.value = '';
         this.roomError.textContent = '';
     }
 
@@ -287,5 +329,69 @@ export class UIManager {
 
     hideReconnectBanner() {
         this.reconnectBanner.classList.add('hidden');
+    }
+
+    updateRoomList(rooms) {
+        this.roomListEl.innerHTML = '';
+        for (const room of rooms) {
+            const card = document.createElement('div');
+            card.className = 'room-card' + (room.state !== 'lobby' ? ' in-game' : '');
+
+            const code = document.createElement('div');
+            code.className = 'room-card-code';
+            code.textContent = room.roomCode;
+
+            const info = document.createElement('div');
+            info.className = 'room-card-info';
+            const host = document.createElement('div');
+            host.className = 'room-card-host';
+            host.textContent = room.hostName;
+            const players = document.createElement('div');
+            players.className = 'room-card-players';
+            players.textContent = `${room.playerCount}/${room.maxPlayers}명`;
+            info.appendChild(host);
+            info.appendChild(players);
+
+            const right = document.createElement('div');
+            right.className = 'room-card-right';
+            if (room.hasPassword) {
+                const lock = document.createElement('span');
+                lock.className = 'room-lock-icon';
+                lock.textContent = '\u{1F512}';
+                right.appendChild(lock);
+            }
+            const badge = document.createElement('span');
+            badge.className = 'room-status-badge ' + (room.state === 'lobby' ? 'lobby' : 'playing');
+            badge.textContent = room.state === 'lobby' ? '대기중' : '게임중';
+            right.appendChild(badge);
+
+            card.appendChild(code);
+            card.appendChild(info);
+            card.appendChild(right);
+
+            if (room.state === 'lobby') {
+                card.addEventListener('click', () => {
+                    if (room.hasPassword) {
+                        this.showPasswordModal(room.roomCode);
+                    } else if (this.onJoinRoomFromList) {
+                        this.onJoinRoomFromList(room.roomCode, null);
+                    }
+                });
+            }
+
+            this.roomListEl.appendChild(card);
+        }
+    }
+
+    showPasswordModal(roomCode) {
+        this._pendingJoinCode = roomCode;
+        this.modalPasswordInput.value = '';
+        this.passwordModal.classList.remove('hidden');
+        this.modalPasswordInput.focus();
+    }
+
+    hidePasswordModal() {
+        this.passwordModal.classList.add('hidden');
+        this._pendingJoinCode = null;
     }
 }

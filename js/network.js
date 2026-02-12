@@ -14,6 +14,7 @@ export class NetworkManager {
         this.onRoomJoined = null;
         this.onJoinError = null;
         this.onRoomUpdate = null;
+        this.onRoomList = null;
         this.onGameStart = null;
         this.onRoundStart = null;
         this.onPlayerShotReady = null;
@@ -64,6 +65,10 @@ export class NetworkManager {
             if (this.onJoinError) this.onJoinError(message);
         });
 
+        this.socket.on('room-list', (data) => {
+            if (this.onRoomList) this.onRoomList(data);
+        });
+
         this.socket.on('room-update', (data) => {
             this.players = data.players;
             this.isHost = data.hostId === this.myId;
@@ -112,12 +117,16 @@ export class NetworkManager {
         });
     }
 
-    createRoom(name) {
-        this.socket.emit('create-room', { name });
+    createRoom(name, password) {
+        this.socket.emit('create-room', { name, password: password || null });
     }
 
-    joinRoom(name, roomCode) {
-        this.socket.emit('join-room', { name, roomCode: roomCode.trim() });
+    joinRoom(name, roomCode, password) {
+        this.socket.emit('join-room', { name, roomCode: roomCode.trim(), password: password || null });
+    }
+
+    requestRoomList() {
+        this.socket.emit('get-rooms');
     }
 
     toggleReady() {

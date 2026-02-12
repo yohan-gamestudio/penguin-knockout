@@ -142,7 +142,7 @@ gameState.onStateChange = (newState, oldState) => {
         case States.ROUND_START:
             ui.showRoundBanner(gameState.round);
             const aliveCount = gameState.getAlivePenguins().length;
-            ui.showSliding(gameState.round, aliveCount);
+            ui.showSliding(gameState.round, aliveCount, gameState.multiplayer);
             cameraRig.setOverview();
             controls.disable();
             controls.hideArrow();
@@ -150,7 +150,7 @@ gameState.onStateChange = (newState, oldState) => {
 
         case States.AIMING: {
             const alive = gameState.getAlivePenguins();
-            ui.showAiming(gameState.round, alive.length);
+            ui.showAiming(gameState.round, alive.length, gameState.multiplayer);
             controls.setPower(ui.getPowerLevel());
             if (!gameState.multiplayer) {
                 const player = penguins.find(p => p.isPlayer && p.alive);
@@ -187,7 +187,7 @@ gameState.onStateChange = (newState, oldState) => {
                 effects.spawnLaunchTrail(shot.penguin.mesh.position, { x: shot.dirX, z: shot.dirZ });
             }
 
-            ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
+            ui.showSliding(gameState.round, gameState.getAlivePenguins().length, gameState.multiplayer);
 
             setTimeout(() => {
                 gameState.startSliding();
@@ -212,14 +212,19 @@ gameState.onStateChange = (newState, oldState) => {
 ui.onNameSubmit = (name) => {
     playerName = name;
     ui.showRoomScreen();
+    network.requestRoomList();
 };
 
-ui.onCreateRoom = () => {
-    network.createRoom(playerName);
+ui.onCreateRoom = (password) => {
+    network.createRoom(playerName, password);
 };
 
-ui.onJoinRoom = (code) => {
-    network.joinRoom(playerName, code);
+ui.onJoinRoom = (code, password) => {
+    network.joinRoom(playerName, code, password);
+};
+
+ui.onJoinRoomFromList = (code, password) => {
+    network.joinRoom(playerName, code, password);
 };
 
 ui.onReady = () => {
@@ -229,6 +234,7 @@ ui.onReady = () => {
 ui.onLeaveRoom = () => {
     network.leaveRoom();
     ui.showRoomScreen();
+    network.requestRoomList();
 };
 
 ui.onReturnToLobby = () => {
@@ -264,7 +270,7 @@ ui.onLaunch = () => {
             }
         }
         controls.disable();
-        ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
+        ui.showSliding(gameState.round, gameState.getAlivePenguins().length, gameState.multiplayer);
     } else {
         gameState.launch();
     }
@@ -343,6 +349,10 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+network.onRoomList = (rooms) => {
+    ui.updateRoomList(rooms);
+};
+
 network.onRoomCreated = (code) => {
     ui.showLobby(code);
 };
@@ -353,6 +363,7 @@ network.onRoomJoined = (code) => {
 
 network.onJoinError = (msg) => {
     ui.showRoomError(msg);
+    ui.hidePasswordModal();
 };
 
 network.onRoomUpdate = (data) => {
@@ -385,7 +396,7 @@ network.onRoundStart = ({ round }) => {
         controls.setPlayerPosition(myPenguin.mesh.position);
         controls.enable();
     }
-    ui.showAiming(round, gameState.getAlivePenguins().length);
+    ui.showAiming(round, gameState.getAlivePenguins().length, true);
 };
 
 network.onAllShots = ({ shots }) => {
@@ -398,12 +409,12 @@ network.onAllShots = ({ shots }) => {
         }
     }
     gameState.startSliding();
-    ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
+    ui.showSliding(gameState.round, gameState.getAlivePenguins().length, true);
 };
 
-network.onGameOver = ({ winner, rankings }) => {
+network.onGameOver = ({ winner, rankings, maxRounds }) => {
     const iWon = winner && winner.id === network.myId;
-    ui.showGameOver(iWon, winner ? winner.name : null, true, rankings);
+    ui.showGameOver(iWon, winner ? winner.name : null, true, rankings, maxRounds);
     gameState.state = States.GAME_OVER;
     controls.disable();
 };
@@ -426,9 +437,10 @@ network.onReconnectSuccess = (data) => {
         ui.showLobby(data.roomCode);
         ui.updateLobbyPlayers(data.players);
     } else if (data.state === 'gameover') {
-        const winner = data.lastEvent && data.lastEvent.type === 'game-over' ? data.lastEvent.data.winner : null;
+        const goData = data.lastEvent && data.lastEvent.type === 'game-over' ? data.lastEvent.data : {};
+        const winner = goData.winner || null;
         const iWon = winner && winner.id === network.myId;
-        ui.showGameOver(iWon, winner ? winner.name : null, true);
+        ui.showGameOver(iWon, winner ? winner.name : null, true, goData.rankings || null, goData.maxRounds || false);
         controls.disable();
     } else {
         // Game in progress - restore state from server
@@ -462,7 +474,7 @@ network.onReconnectSuccess = (data) => {
                         controls.setPlayerPosition(myPenguin.mesh.position);
                         controls.enable();
                     }
-                    ui.showAiming(gameState.round, gameState.getAlivePenguins().length);
+                    ui.showAiming(gameState.round, gameState.getAlivePenguins().length, true);
                     break;
                 }
                 case 'all-shots': {
@@ -474,13 +486,14 @@ network.onReconnectSuccess = (data) => {
                         }
                     }
                     gameState.startSliding();
-                    ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
+                    ui.showSliding(gameState.round, gameState.getAlivePenguins().length, true);
                     break;
                 }
                 case 'game-over': {
-                    const winner = data.lastEvent.data.winner;
+                    const goEvt = data.lastEvent.data;
+                    const winner = goEvt.winner;
                     const iWon = winner && winner.id === network.myId;
-                    ui.showGameOver(iWon, winner ? winner.name : null, true);
+                    ui.showGameOver(iWon, winner ? winner.name : null, true, goEvt.rankings || null, goEvt.maxRounds || false);
                     controls.disable();
                     break;
                 }
@@ -493,6 +506,7 @@ network.onReconnectFailed = () => {
     ui.hideReconnectBanner();
     ui.showNameScreen();
 };
+
 
 network.connect();
 

@@ -12,6 +12,7 @@ app.use(express.static('.'));
 const rooms = new Map();
 const sessions = new Map(); // sessionToken -> { socketId, roomCode, playerName }
 const RECONNECT_GRACE_MS = 30000;
+const MAX_ROUNDS = 10;
 
 function generateRoomCode() {
     let code;
@@ -19,6 +20,29 @@ function generateRoomCode() {
         code = String(Math.floor(1000 + Math.random() * 9000));
     } while (rooms.has(code));
     return code;
+}
+
+function broadcastRoomList() {
+    const roomList = [];
+    rooms.forEach((room, code) => {
+        let hostName = '';
+        room.players.forEach(p => {
+            if (!hostName) hostName = p.name;
+        });
+        // Find host name specifically
+        const hostPlayer = room.players.get(room.hostId);
+        if (hostPlayer) hostName = hostPlayer.name;
+
+        roomList.push({
+            roomCode: code,
+            playerCount: room.players.size,
+            maxPlayers: 4,
+            state: room.state,
+            hasPassword: !!room.password,
+            hostName
+        });
+    });
+    io.emit('room-list', roomList);
 }
 
 function broadcastRoomUpdate(roomCode) {
@@ -38,6 +62,7 @@ function broadcastRoomUpdate(roomCode) {
         players: playerList,
         state: room.state,
         round: room.round,
+        maxRounds: MAX_ROUNDS,
         hostId: room.hostId
     });
 }
@@ -60,6 +85,7 @@ function removePlayerFromRoom(socketId, roomCode) {
 
     if (room.players.size === 0) {
         rooms.delete(roomCode);
+        broadcastRoomList();
         console.log(`Room ${roomCode} deleted (empty)`);
     } else {
         if (room.hostId === socketId) {
@@ -72,6 +98,7 @@ function removePlayerFromRoom(socketId, roomCode) {
             }
         }
         broadcastRoomUpdate(roomCode);
+        broadcastRoomList();
 
         // Check active (non-disconnected) player count for game state
         let activeCount = 0;
@@ -111,7 +138,23 @@ io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
     let currentRoom = null;
 
-    socket.on('create-room', ({ name }) => {
+    socket.on('get-rooms', () => {
+        const roomList = [];
+        rooms.forEach((room, code) => {
+            const hostPlayer = room.players.get(room.hostId);
+            roomList.push({
+                roomCode: code,
+                playerCount: room.players.size,
+                maxPlayers: 4,
+                state: room.state,
+                hasPassword: !!room.password,
+                hostName: hostPlayer ? hostPlayer.name : ''
+            });
+        });
+        socket.emit('room-list', roomList);
+    });
+
+    socket.on('create-room', ({ name, password }) => {
         const code = generateRoomCode();
         const token = crypto.randomUUID();
         const room = {
@@ -120,7 +163,8 @@ io.on('connection', (socket) => {
             round: 0,
             hostId: socket.id,
             lastEvent: null,
-            eliminationOrder: []
+            eliminationOrder: [],
+            password: password && password.trim() ? password.trim() : null
         };
         room.players.set(socket.id, {
             name, ready: false, shot: null, alive: true,
@@ -132,10 +176,11 @@ io.on('connection', (socket) => {
         socket.join(code);
         socket.emit('room-created', { roomCode: code, sessionToken: token });
         broadcastRoomUpdate(code);
+        broadcastRoomList();
         console.log(`Room ${code} created by ${name}`);
     });
 
-    socket.on('join-room', ({ name, roomCode }) => {
+    socket.on('join-room', ({ name, roomCode, password }) => {
         const room = rooms.get(roomCode);
         if (!room) {
             socket.emit('join-error', { message: '방을 찾을 수 없습니다.' });
@@ -147,6 +192,10 @@ io.on('connection', (socket) => {
         }
         if (room.players.size >= 4) {
             socket.emit('join-error', { message: '방이 가득 찼습니다. (최대 4명)' });
+            return;
+        }
+        if (room.password && room.password !== (password || '').trim()) {
+            socket.emit('join-error', { message: '비밀번호가 틀렸습니다.' });
             return;
         }
 
@@ -161,6 +210,7 @@ io.on('connection', (socket) => {
         socket.join(roomCode);
         socket.emit('room-joined', { roomCode, sessionToken: token });
         broadcastRoomUpdate(roomCode);
+        broadcastRoomList();
         console.log(`${name} joined room ${roomCode}`);
     });
 
@@ -274,6 +324,7 @@ io.on('connection', (socket) => {
 
             room.lastEvent = { type: 'game-start', data: { players: playerList } };
             io.to(currentRoom).emit('game-start', { players: playerList });
+            broadcastRoomList();
 
             setTimeout(() => {
                 startNewRound(currentRoom);
@@ -349,6 +400,18 @@ io.on('connection', (socket) => {
             }
             room.lastEvent = { type: 'game-over', data: { winner, rankings } };
             io.to(currentRoom).emit('game-over', { winner, rankings });
+        } else if (room.round >= MAX_ROUNDS) {
+            // Max rounds reached - game over as draw
+            room.state = 'gameover';
+            const rankings = [];
+            room.players.forEach((p, id) => {
+                if (p.alive) rankings.push({ id, name: p.name, penguinIndex: p.penguinIndex });
+            });
+            for (let i = room.eliminationOrder.length - 1; i >= 0; i--) {
+                rankings.push(room.eliminationOrder[i]);
+            }
+            room.lastEvent = { type: 'game-over', data: { winner: null, rankings, maxRounds: true } };
+            io.to(currentRoom).emit('game-over', { winner: null, rankings, maxRounds: true });
         } else {
             startNewRound(currentRoom);
         }
@@ -378,6 +441,7 @@ io.on('connection', (socket) => {
             broadcastRoomUpdate(currentRoom);
         }
 
+        broadcastRoomList();
         currentRoom = null;
         console.log(`Player ${socket.id} left room`);
     });
@@ -408,6 +472,7 @@ io.on('connection', (socket) => {
         toRemove.forEach(id => room.players.delete(id));
 
         broadcastRoomUpdate(currentRoom);
+        broadcastRoomList();
     });
 
     socket.on('disconnect', () => {

@@ -111,6 +111,42 @@
             font-size: 1.2em; text-align: center; }
         .ranking-item:first-child { background: rgba(255,200,0,0.2); border: 1px solid rgba(255,200,0,0.4); }
 
+        /* Room list */
+        .room-create-section, .room-join-section { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .mp-input-small { width: 200px; padding: 10px 16px; font-size: 1em; margin-bottom: 0; }
+        .room-list { display: flex; flex-direction: column; gap: 8px; width: 400px; max-height: 240px;
+            overflow-y: auto; padding: 4px; }
+        .room-list:empty::after { content: '방이 없습니다'; color: rgba(255,255,255,0.4);
+            text-align: center; padding: 20px; font-size: 1em; }
+        .room-card { display: flex; align-items: center; gap: 12px; background: rgba(20,20,60,0.6);
+            padding: 12px 16px; border-radius: 10px; cursor: pointer; transition: background 0.2s;
+            border: 1px solid rgba(68,136,255,0.2); }
+        .room-card:hover { background: rgba(40,40,100,0.8); border-color: rgba(68,136,255,0.5); }
+        .room-card.in-game { cursor: default; opacity: 0.7; }
+        .room-card.in-game:hover { background: rgba(20,20,60,0.6); border-color: rgba(68,136,255,0.2); }
+        .room-card-code { font-family: 'Courier New', monospace; font-size: 1.2em; font-weight: bold;
+            color: #4488ff; min-width: 50px; }
+        .room-card-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .room-card-host { font-size: 1em; color: white; }
+        .room-card-players { font-size: 0.85em; color: rgba(255,255,255,0.6); }
+        .room-card-right { display: flex; align-items: center; gap: 8px; }
+        .room-status-badge { padding: 4px 10px; border-radius: 6px; font-size: 0.8em; font-weight: bold; }
+        .room-status-badge.lobby { background: rgba(51,204,51,0.3); color: #33cc33; }
+        .room-status-badge.playing { background: rgba(255,160,0,0.3); color: #ffa000; }
+        .room-lock-icon { font-size: 1.1em; }
+
+        /* Password modal */
+        .password-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.8); z-index: 30; backdrop-filter: blur(4px); }
+        .password-modal-content { background: rgba(20,20,60,0.95); padding: 30px 40px; border-radius: 16px;
+            border: 1px solid #4488ff; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+        .password-modal-content h2 { color: white; font-size: 1.3em; margin: 0; }
+        .password-modal-buttons { display: flex; gap: 12px; }
+        .password-modal-buttons button { padding: 10px 30px; font-size: 1.1em; border: none; border-radius: 8px;
+            cursor: pointer; color: white; transition: transform 0.1s; }
+        .password-modal-buttons button:first-child { background: #4488ff; }
+        .password-modal-buttons button:first-child:hover { background: #5599ff; transform: scale(1.05); }
+
         /* Reconnect banner */
         #reconnect-banner { position: fixed; top: 0; left: 0; width: 100%; padding: 16px;
             background: rgba(255,160,0,0.9); color: white; text-align: center; font-size: 1.1em;
@@ -133,12 +169,32 @@
     <!-- Room Screen -->
     <div id="room-screen" class="screen-overlay hidden">
         <h1>🐧 펭귄 알까기</h1>
-        <button id="create-room-btn">방 만들기</button>
+        <div class="room-create-section">
+            <input type="text" id="create-password-input" class="mp-input mp-input-small" placeholder="비밀번호 (선택)" maxlength="4">
+            <button id="create-room-btn">방 만들기</button>
+        </div>
         <div class="mp-divider">또는</div>
-        <input type="text" id="room-code-input" class="mp-input" placeholder="방 코드 (4자리)" maxlength="4">
-        <button id="join-room-btn">참가하기</button>
+        <div class="room-join-section">
+            <input type="text" id="room-code-input" class="mp-input mp-input-small" placeholder="방 코드 (4자리)" maxlength="4">
+            <input type="text" id="join-password-input" class="mp-input mp-input-small" placeholder="비밀번호" maxlength="4">
+            <button id="join-room-btn">참가하기</button>
+        </div>
         <div id="room-error" class="mp-error"></div>
+        <div class="mp-divider">방 목록</div>
+        <div id="room-list" class="room-list"></div>
         <button id="room-back-btn" class="back-btn">뒤로</button>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="password-modal" class="password-modal hidden">
+        <div class="password-modal-content">
+            <h2>비밀번호 입력</h2>
+            <input type="text" id="modal-password-input" class="mp-input" placeholder="비밀번호 (4자리)" maxlength="4">
+            <div class="password-modal-buttons">
+                <button id="modal-password-submit">확인</button>
+                <button id="modal-password-cancel" class="back-btn">취소</button>
+            </div>
+        </div>
     </div>
 
     <!-- Lobby Screen -->
