@@ -118,9 +118,13 @@ export class PhysicsWorld {
         // Release Y-axis lock when penguin goes past platform edge → allow falling
         for (const body of this.penguinBodies) {
             const r = Math.sqrt(body.position.x ** 2 + body.position.z ** 2);
-            if (r > PLATFORM_RADIUS - 0.3) {
+            if (r > PLATFORM_RADIUS - 0.3 && body.linearFactor.y === 0) {
                 // Past the edge - unlock Y to allow gravity/falling
                 body.linearFactor.set(1, 1, 1);
+                // 바깥 방향으로 impulse 한 번 적용 - 자연스럽게 밀려나가는 효과
+                const outX = body.position.x / r;
+                const outZ = body.position.z / r;
+                body.applyImpulse(new CANNON.Vec3(outX * 3, 2, outZ * 3));
             }
         }
     }
