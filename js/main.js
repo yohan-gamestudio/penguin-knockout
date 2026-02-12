@@ -308,6 +308,12 @@ function gameLoop() {
 
     syncMeshes();
 
+    // 화살표가 펭귄을 따라다니도록 위치 업데이트
+    const myPenguin = penguins.find(p => p.isPlayer && p.alive);
+    if (myPenguin) {
+        controls.setPlayerPosition(myPenguin.mesh.position);
+    }
+
     gameState.update(dt, physics, network);
 
     cameraRig.update(dt);
@@ -372,6 +378,7 @@ network.onGameStart = ({ players }) => {
 
 network.onRoundStart = ({ round }) => {
     gameState.round = round;
+    controls.hideArrow();
     gameState.transition(States.AIMING);
     const myPenguin = penguins.find(p => p.penguinIndex === network.myPenguinIndex);
     if (myPenguin && myPenguin.alive) {
