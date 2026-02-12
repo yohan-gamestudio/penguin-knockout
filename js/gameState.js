@@ -17,6 +17,9 @@ export class GameState {
         this.slidingTimeout = 6;
         this.roundStartTimer = 0;
         this.roundStartDuration = 1.5;
+        this.gameOverDelay = 0;
+        this.gameOverDelayDuration = 2.0;
+        this.gameOverPending = false;
         this.onStateChange = null;
         this.multiplayer = false;
     }
@@ -50,7 +53,13 @@ export class GameState {
 
             case States.SLIDING:
                 this.slidingTimer += dt;
-                if (physics.allSettled() || this.slidingTimer >= this.slidingTimeout) {
+                if (this.gameOverPending) {
+                    this.gameOverDelay += dt;
+                    if (this.gameOverDelay >= this.gameOverDelayDuration) {
+                        this.gameOverPending = false;
+                        this.transition(States.GAME_OVER);
+                    }
+                } else if (physics.allSettled() || this.slidingTimer >= this.slidingTimeout) {
                     this.transition(States.CHECK_ELIMINATIONS);
                 }
                 break;
@@ -91,7 +100,9 @@ export class GameState {
         } else {
             const alive = this.penguins.filter(p => p.alive);
             if (alive.length <= 1) {
-                this.transition(States.GAME_OVER);
+                this.gameOverPending = true;
+                this.gameOverDelay = 0;
+                this.transition(States.SLIDING);
             } else {
                 this.startNewRound();
             }
@@ -118,5 +129,7 @@ export class GameState {
         this.state = States.MENU;
         this.round = 0;
         this.penguins = [];
+        this.gameOverPending = false;
+        this.gameOverDelay = 0;
     }
 }

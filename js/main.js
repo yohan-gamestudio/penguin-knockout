@@ -194,8 +194,7 @@ gameState.onStateChange = (newState, oldState) => {
         }
 
         case States.SLIDING: {
-            const aliveMeshes = gameState.getAlivePenguins().map(p => p.mesh);
-            cameraRig.followAction(aliveMeshes);
+            cameraRig.setOverview();
             break;
         }
 
