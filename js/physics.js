@@ -1,10 +1,10 @@
 import * as CANNON from 'cannon-es';
 
 const PLATFORM_RADIUS = 12;
-const ICE_FRICTION = 0.04;
-const ICE_RESTITUTION = 0.3;
+const ICE_FRICTION = 0.02;
+const ICE_RESTITUTION = 0.1;
 const PENGUIN_MASS = 1;
-const PENGUIN_DAMPING = 0.15;
+const PENGUIN_DAMPING = 0.25;
 const ANGULAR_DAMPING = 0.5;
 const LAUNCH_FORCE_MAX = 40;
 
@@ -51,17 +51,18 @@ export class PhysicsWorld {
     }
 
     createPenguinBody(x, y, z) {
-        const shape = new CANNON.Cylinder(0.4, 0.5, 1.2, 8);
+        const shape = new CANNON.Sphere(0.5);
         const body = new CANNON.Body({
             mass: PENGUIN_MASS,
             shape: shape,
             position: new CANNON.Vec3(x, y, z),
             linearDamping: PENGUIN_DAMPING,
             angularDamping: ANGULAR_DAMPING,
-            material: this.penguinMaterial
+            material: this.penguinMaterial,
+            fixedRotation: true
         });
-        // Lock rotation except Y axis to prevent tipping over
-        body.angularFactor.set(0, 1, 0);
+        // Lock Y axis movement while on platform - allows pure XZ sliding
+        body.linearFactor.set(1, 0, 1);
         this.world.addBody(body);
         this.penguinBodies.push(body);
         return body;
@@ -87,7 +88,9 @@ export class PhysicsWorld {
     }
 
     launchPenguin(body, directionX, directionZ, powerLevel) {
-        // powerLevel: 1-10 scale
+        // Re-lock Y axis for this round (in case it was unlocked from falling near edge)
+        body.linearFactor.set(1, 0, 1);
+        body.velocity.set(0, 0, 0);
         const force = (powerLevel / 10) * LAUNCH_FORCE_MAX;
         const impulse = new CANNON.Vec3(directionX * force, 0, directionZ * force);
         body.wakeUp();
@@ -111,8 +114,15 @@ export class PhysicsWorld {
     }
 
     step(dt) {
-        // Step the physics simulation forward
         this.world.step(1/60, dt, 3);
+        // Release Y-axis lock when penguin goes past platform edge → allow falling
+        for (const body of this.penguinBodies) {
+            const r = Math.sqrt(body.position.x ** 2 + body.position.z ** 2);
+            if (r > PLATFORM_RADIUS - 0.3) {
+                // Past the edge - unlock Y to allow gravity/falling
+                body.linearFactor.set(1, 1, 1);
+            }
+        }
     }
 
     removePenguinBody(body) {
