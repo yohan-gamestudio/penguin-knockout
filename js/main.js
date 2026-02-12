@@ -404,6 +404,7 @@ network.onAllShots = ({ shots }) => {
 network.onGameOver = ({ winner }) => {
     const iWon = winner && winner.id === network.myId;
     ui.showGameOver(iWon, winner ? winner.name : null, true);
+    gameState.state = States.GAME_OVER;
     controls.disable();
 };
 

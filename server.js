@@ -311,7 +311,7 @@ io.on('connection', (socket) => {
         if (!currentRoom) return;
         const room = rooms.get(currentRoom);
         if (!room) return;
-
+        if (room.state !== 'round_sliding') return;
         if (socket.id !== room.hostId) return;
 
         room.players.forEach(p => {
