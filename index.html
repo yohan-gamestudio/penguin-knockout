@@ -104,10 +104,17 @@
         #ready-btn.ready:hover { background: #ff7755 !important; }
 
         .lobby-hint { color: rgba(255,255,255,0.6); font-size: 1em; margin-top: 10px; }
+
+        /* Reconnect banner */
+        #reconnect-banner { position: fixed; top: 0; left: 0; width: 100%; padding: 16px;
+            background: rgba(255,160,0,0.9); color: white; text-align: center; font-size: 1.1em;
+            font-weight: bold; z-index: 100; animation: pulse-banner 1.5s ease-in-out infinite; }
+        @keyframes pulse-banner { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
+    <div id="reconnect-banner" class="hidden">서버에 재연결 중...</div>
 
     <!-- Name Input Screen -->
     <div id="name-screen" class="screen-overlay">

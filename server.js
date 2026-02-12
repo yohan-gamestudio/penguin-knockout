@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -9,6 +10,8 @@ const io = new Server(server);
 app.use(express.static('.'));
 
 const rooms = new Map();
+const sessions = new Map(); // sessionToken -> { socketId, roomCode, playerName }
+const RECONNECT_GRACE_MS = 30000;
 
 function generateRoomCode() {
     let code;
@@ -24,7 +27,10 @@ function broadcastRoomUpdate(roomCode) {
 
     const playerList = [];
     room.players.forEach((p, id) => {
-        playerList.push({ id, name: p.name, ready: p.ready, alive: p.alive, penguinIndex: p.penguinIndex });
+        playerList.push({
+            id, name: p.name, ready: p.ready, alive: p.alive,
+            penguinIndex: p.penguinIndex, disconnected: !!p.disconnected
+        });
     });
 
     io.to(roomCode).emit('room-update', {
@@ -34,6 +40,47 @@ function broadcastRoomUpdate(roomCode) {
         round: room.round,
         hostId: room.hostId
     });
+}
+
+function removePlayerFromRoom(socketId, roomCode) {
+    const room = rooms.get(roomCode);
+    if (!room) return;
+
+    const player = room.players.get(socketId);
+    if (player && player.sessionToken) {
+        sessions.delete(player.sessionToken);
+    }
+
+    room.players.delete(socketId);
+
+    if (room.players.size === 0) {
+        rooms.delete(roomCode);
+        console.log(`Room ${roomCode} deleted (empty)`);
+    } else {
+        if (room.hostId === socketId) {
+            // Reassign host to first connected player
+            for (const [id, p] of room.players) {
+                if (!p.disconnected) {
+                    room.hostId = id;
+                    break;
+                }
+            }
+        }
+        broadcastRoomUpdate(roomCode);
+
+        // Check active (non-disconnected) player count for game state
+        let activeCount = 0;
+        room.players.forEach(p => { if (!p.disconnected) activeCount++; });
+
+        if (room.state !== 'lobby' && activeCount < 2) {
+            room.state = 'gameover';
+            let winner = null;
+            room.players.forEach((p, id) => {
+                if (p.alive && !p.disconnected) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
+            });
+            io.to(roomCode).emit('game-over', { winner });
+        }
+    }
 }
 
 function startNewRound(roomCode) {
@@ -54,17 +101,22 @@ io.on('connection', (socket) => {
 
     socket.on('create-room', ({ name }) => {
         const code = generateRoomCode();
+        const token = crypto.randomUUID();
         const room = {
             players: new Map(),
             state: 'lobby',
             round: 0,
             hostId: socket.id
         };
-        room.players.set(socket.id, { name, ready: false, shot: null, alive: true, penguinIndex: 0 });
+        room.players.set(socket.id, {
+            name, ready: false, shot: null, alive: true,
+            penguinIndex: 0, sessionToken: token, disconnected: false
+        });
         rooms.set(code, room);
+        sessions.set(token, { socketId: socket.id, roomCode: code, playerName: name });
         currentRoom = code;
         socket.join(code);
-        socket.emit('room-created', { roomCode: code });
+        socket.emit('room-created', { roomCode: code, sessionToken: token });
         broadcastRoomUpdate(code);
         console.log(`Room ${code} created by ${name}`);
     });
@@ -84,13 +136,84 @@ io.on('connection', (socket) => {
             return;
         }
 
+        const token = crypto.randomUUID();
         const penguinIndex = room.players.size;
-        room.players.set(socket.id, { name, ready: false, shot: null, alive: true, penguinIndex });
+        room.players.set(socket.id, {
+            name, ready: false, shot: null, alive: true,
+            penguinIndex, sessionToken: token, disconnected: false
+        });
+        sessions.set(token, { socketId: socket.id, roomCode: roomCode, playerName: name });
         currentRoom = roomCode;
         socket.join(roomCode);
-        socket.emit('room-joined', { roomCode });
+        socket.emit('room-joined', { roomCode, sessionToken: token });
         broadcastRoomUpdate(roomCode);
         console.log(`${name} joined room ${roomCode}`);
+    });
+
+    socket.on('reconnect-attempt', ({ sessionToken }) => {
+        const session = sessions.get(sessionToken);
+        if (!session) {
+            socket.emit('reconnect-failed');
+            return;
+        }
+
+        const room = rooms.get(session.roomCode);
+        if (!room) {
+            sessions.delete(sessionToken);
+            socket.emit('reconnect-failed');
+            return;
+        }
+
+        const oldSocketId = session.socketId;
+        const player = room.players.get(oldSocketId);
+        if (!player) {
+            sessions.delete(sessionToken);
+            socket.emit('reconnect-failed');
+            return;
+        }
+
+        // Cancel grace period timer
+        if (player.disconnectTimer) {
+            clearTimeout(player.disconnectTimer);
+            player.disconnectTimer = null;
+        }
+
+        // Remap player to new socket ID
+        room.players.delete(oldSocketId);
+        player.disconnected = false;
+        room.players.set(socket.id, player);
+
+        // Update session
+        session.socketId = socket.id;
+
+        // Update host if needed
+        if (room.hostId === oldSocketId) {
+            room.hostId = socket.id;
+        }
+
+        currentRoom = session.roomCode;
+        socket.join(session.roomCode);
+
+        // Build player list for client
+        const playerList = [];
+        room.players.forEach((p, id) => {
+            playerList.push({
+                id, name: p.name, ready: p.ready, alive: p.alive,
+                penguinIndex: p.penguinIndex, disconnected: !!p.disconnected
+            });
+        });
+
+        socket.emit('reconnect-success', {
+            roomCode: session.roomCode,
+            state: room.state,
+            round: room.round,
+            players: playerList,
+            hostId: room.hostId,
+            myPenguinIndex: player.penguinIndex
+        });
+
+        broadcastRoomUpdate(session.roomCode);
+        console.log(`Player ${session.playerName} reconnected to room ${session.roomCode}`);
     });
 
     socket.on('player-ready', () => {
@@ -105,33 +228,38 @@ io.on('connection', (socket) => {
 
         broadcastRoomUpdate(currentRoom);
 
-        if (room.players.size >= 2) {
-            let allReady = true;
-            room.players.forEach(p => { if (!p.ready) allReady = false; });
-
-            if (allReady) {
-                room.state = 'playing';
-                room.round = 0;
-
-                let idx = 0;
-                room.players.forEach(p => {
-                    p.penguinIndex = idx++;
-                    p.alive = true;
-                    p.ready = false;
-                    p.shot = null;
-                });
-
-                const playerList = [];
-                room.players.forEach((p, id) => {
-                    playerList.push({ id, name: p.name, penguinIndex: p.penguinIndex, alive: true });
-                });
-
-                io.to(currentRoom).emit('game-start', { players: playerList });
-
-                setTimeout(() => {
-                    startNewRound(currentRoom);
-                }, 500);
+        // Count only connected players for ready check
+        let connectedCount = 0;
+        let allReady = true;
+        room.players.forEach(p => {
+            if (!p.disconnected) {
+                connectedCount++;
+                if (!p.ready) allReady = false;
             }
+        });
+
+        if (connectedCount >= 2 && allReady) {
+            room.state = 'playing';
+            room.round = 0;
+
+            let idx = 0;
+            room.players.forEach(p => {
+                p.penguinIndex = idx++;
+                p.alive = true;
+                p.ready = false;
+                p.shot = null;
+            });
+
+            const playerList = [];
+            room.players.forEach((p, id) => {
+                playerList.push({ id, name: p.name, penguinIndex: p.penguinIndex, alive: true });
+            });
+
+            io.to(currentRoom).emit('game-start', { players: playerList });
+
+            setTimeout(() => {
+                startNewRound(currentRoom);
+            }, 500);
         }
     });
 
@@ -149,7 +277,8 @@ io.on('connection', (socket) => {
 
         let allSubmitted = true;
         room.players.forEach(p => {
-            if (p.alive && !p.shot) allSubmitted = false;
+            // Skip disconnected players in allSubmitted check
+            if (p.alive && !p.shot && !p.disconnected) allSubmitted = false;
         });
 
         if (allSubmitted) {
@@ -204,6 +333,12 @@ io.on('connection', (socket) => {
         const room = rooms.get(currentRoom);
         if (!room) return;
 
+        // Intentional leave: clear session immediately
+        const player = room.players.get(socket.id);
+        if (player && player.sessionToken) {
+            sessions.delete(player.sessionToken);
+        }
+
         socket.leave(currentRoom);
         room.players.delete(socket.id);
 
@@ -228,11 +363,21 @@ io.on('connection', (socket) => {
 
         room.state = 'lobby';
         room.round = 0;
-        room.players.forEach(p => {
-            p.ready = false;
-            p.shot = null;
-            p.alive = true;
+
+        // Purge disconnected players before returning to lobby
+        const toRemove = [];
+        room.players.forEach((p, id) => {
+            if (p.disconnected) {
+                if (p.disconnectTimer) clearTimeout(p.disconnectTimer);
+                if (p.sessionToken) sessions.delete(p.sessionToken);
+                toRemove.push(id);
+            } else {
+                p.ready = false;
+                p.shot = null;
+                p.alive = true;
+            }
         });
+        toRemove.forEach(id => room.players.delete(id));
 
         broadcastRoomUpdate(currentRoom);
     });
@@ -244,25 +389,36 @@ io.on('connection', (socket) => {
         const room = rooms.get(currentRoom);
         if (!room) return;
 
-        room.players.delete(socket.id);
+        const player = room.players.get(socket.id);
+        if (!player) return;
 
-        if (room.players.size === 0) {
-            rooms.delete(currentRoom);
-            console.log(`Room ${currentRoom} deleted (empty)`);
-        } else {
+        // If player has a session token, use grace period instead of immediate removal
+        if (player.sessionToken) {
+            player.disconnected = true;
+            const savedRoom = currentRoom;
+            const savedSocketId = socket.id;
+
+            // Reassign host temporarily if needed
             if (room.hostId === socket.id) {
-                room.hostId = room.players.keys().next().value;
+                for (const [id, p] of room.players) {
+                    if (!p.disconnected && id !== socket.id) {
+                        room.hostId = id;
+                        break;
+                    }
+                }
             }
-            broadcastRoomUpdate(currentRoom);
 
-            if (room.state !== 'lobby' && room.players.size < 2) {
-                room.state = 'gameover';
-                let winner = null;
-                room.players.forEach((p, id) => {
-                    if (p.alive) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
-                });
-                io.to(currentRoom).emit('game-over', { winner });
-            }
+            broadcastRoomUpdate(currentRoom);
+            console.log(`Player ${player.name} disconnected, grace period started (${RECONNECT_GRACE_MS / 1000}s)`);
+
+            // Start grace period timer
+            player.disconnectTimer = setTimeout(() => {
+                console.log(`Grace period expired for ${player.name}`);
+                removePlayerFromRoom(savedSocketId, savedRoom);
+            }, RECONNECT_GRACE_MS);
+        } else {
+            // No session token: immediate removal (legacy behavior)
+            removePlayerFromRoom(socket.id, currentRoom);
         }
     });
 });

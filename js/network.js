@@ -8,6 +8,7 @@ export class NetworkManager {
         this.myPenguinIndex = -1;
         this.isHost = false;
         this.players = [];
+        this.sessionToken = null;
 
         this.onRoomCreated = null;
         this.onRoomJoined = null;
@@ -18,6 +19,9 @@ export class NetworkManager {
         this.onPlayerShotReady = null;
         this.onAllShots = null;
         this.onGameOver = null;
+        this.onReconnectSuccess = null;
+        this.onReconnectFailed = null;
+        this.onDisconnected = null;
     }
 
     connect() {
@@ -26,16 +30,33 @@ export class NetworkManager {
         this.socket.on('connect', () => {
             this.myId = this.socket.id;
             console.log('Connected to server:', this.myId);
+
+            // Try to reconnect to existing session
+            const savedToken = sessionStorage.getItem('penguin-session-token');
+            if (savedToken) {
+                this.socket.emit('reconnect-attempt', { sessionToken: savedToken });
+            }
         });
 
-        this.socket.on('room-created', ({ roomCode }) => {
+        this.socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            if (this.sessionToken) {
+                if (this.onDisconnected) this.onDisconnected();
+            }
+        });
+
+        this.socket.on('room-created', ({ roomCode, sessionToken }) => {
             this.roomCode = roomCode;
             this.isHost = true;
+            this.sessionToken = sessionToken;
+            sessionStorage.setItem('penguin-session-token', sessionToken);
             if (this.onRoomCreated) this.onRoomCreated(roomCode);
         });
 
-        this.socket.on('room-joined', ({ roomCode }) => {
+        this.socket.on('room-joined', ({ roomCode, sessionToken }) => {
             this.roomCode = roomCode;
+            this.sessionToken = sessionToken;
+            sessionStorage.setItem('penguin-session-token', sessionToken);
             if (this.onRoomJoined) this.onRoomJoined(roomCode);
         });
 
@@ -72,6 +93,23 @@ export class NetworkManager {
         this.socket.on('game-over', (data) => {
             if (this.onGameOver) this.onGameOver(data);
         });
+
+        this.socket.on('reconnect-success', (data) => {
+            this.roomCode = data.roomCode;
+            this.myId = this.socket.id;
+            this.myPenguinIndex = data.myPenguinIndex;
+            this.isHost = data.hostId === this.myId;
+            this.players = data.players;
+            console.log('Reconnected to room:', data.roomCode);
+            if (this.onReconnectSuccess) this.onReconnectSuccess(data);
+        });
+
+        this.socket.on('reconnect-failed', () => {
+            console.log('Reconnection failed, clearing session');
+            this.sessionToken = null;
+            sessionStorage.removeItem('penguin-session-token');
+            if (this.onReconnectFailed) this.onReconnectFailed();
+        });
     }
 
     createRoom(name) {
@@ -105,6 +143,8 @@ export class NetworkManager {
         this.roomCode = null;
         this.isHost = false;
         this.myPenguinIndex = -1;
+        this.sessionToken = null;
+        sessionStorage.removeItem('penguin-session-token');
     }
 
     isConnected() {

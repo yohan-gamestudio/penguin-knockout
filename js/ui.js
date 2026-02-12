@@ -35,6 +35,7 @@ export class UIManager {
         this.readyBtn = document.getElementById('ready-btn');
         this.leaveRoomBtn = document.getElementById('leave-room-btn');
         this.returnLobbyBtn = document.getElementById('return-lobby-btn');
+        this.reconnectBanner = document.getElementById('reconnect-banner');
 
         this.powerSlider.addEventListener('input', () => {
             this.powerLabel.textContent = `강도: ${this.powerSlider.value}`;
@@ -228,8 +229,16 @@ export class UIManager {
             name.textContent = player.name;
 
             const badge = document.createElement('div');
-            badge.className = `player-ready-badge ${player.ready ? 'ready' : 'waiting'}`;
-            badge.textContent = player.ready ? '준비완료' : '대기중';
+            if (player.disconnected) {
+                badge.className = 'player-ready-badge waiting';
+                badge.style.background = 'rgba(255,160,0,0.6)';
+                badge.style.color = 'white';
+                badge.textContent = '재연결 중';
+                card.style.opacity = '0.5';
+            } else {
+                badge.className = `player-ready-badge ${player.ready ? 'ready' : 'waiting'}`;
+                badge.textContent = player.ready ? '준비완료' : '대기중';
+            }
 
             card.appendChild(colorDot);
             card.appendChild(name);
@@ -251,5 +260,13 @@ export class UIManager {
 
     showRoomError(message) {
         this.roomError.textContent = message;
+    }
+
+    showReconnectBanner() {
+        this.reconnectBanner.classList.remove('hidden');
+    }
+
+    hideReconnectBanner() {
+        this.reconnectBanner.classList.add('hidden');
     }
 }

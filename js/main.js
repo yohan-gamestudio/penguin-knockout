@@ -394,6 +394,32 @@ network.onGameOver = ({ winner }) => {
     controls.disable();
 };
 
+network.onDisconnected = () => {
+    ui.showReconnectBanner();
+};
+
+network.onReconnectSuccess = (data) => {
+    ui.hideReconnectBanner();
+
+    if (data.state === 'lobby') {
+        ui.showLobby(data.roomCode);
+        ui.updateLobbyPlayers(data.players);
+    } else if (data.state === 'gameover') {
+        const me = data.players.find(p => p.id === network.myId);
+        const iWon = me ? me.alive : false;
+        ui.showGameOver(iWon, null, true);
+    } else {
+        // Playing state (aiming/sliding) - show lobby as safe fallback
+        ui.showLobby(data.roomCode);
+        ui.updateLobbyPlayers(data.players);
+    }
+};
+
+network.onReconnectFailed = () => {
+    ui.hideReconnectBanner();
+    ui.showNameScreen();
+};
+
 network.connect();
 
 ui.showNameScreen();
