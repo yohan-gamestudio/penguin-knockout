@@ -159,10 +159,10 @@ export class UIManager {
             this.gameoverTitle.textContent = '🏆 승리!';
             this.gameoverSubtitle.textContent = '모든 상대 펭귄을 밀어냈습니다!';
         } else {
-            this.gameoverTitle.textContent = '💀 패배...';
-            this.gameoverSubtitle.textContent = winnerName
-                ? `${winnerName}님이 승리했습니다!`
-                : '빙판에서 밀려났습니다!';
+            this.gameoverTitle.textContent = winnerName
+                ? `🏆 ${winnerName} 승리!`
+                : '게임 종료';
+            this.gameoverSubtitle.textContent = '';
         }
 
         // Show rankings
