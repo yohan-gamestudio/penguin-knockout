@@ -36,6 +36,7 @@ export class UIManager {
         this.leaveRoomBtn = document.getElementById('leave-room-btn');
         this.returnLobbyBtn = document.getElementById('return-lobby-btn');
         this.reconnectBanner = document.getElementById('reconnect-banner');
+        this.rankingList = document.getElementById('ranking-list');
 
         this.onPowerChange = null;
         this.powerSlider.addEventListener('input', () => {
@@ -151,7 +152,7 @@ export class UIManager {
         }, 1200);
     }
 
-    showGameOver(playerWon, winnerName = null, isMultiplayer = false) {
+    showGameOver(playerWon, winnerName = null, isMultiplayer = false, rankings = null) {
         this.hideAllScreens();
         this.gameoverScreen.classList.remove('hidden');
         if (playerWon) {
@@ -162,6 +163,22 @@ export class UIManager {
             this.gameoverSubtitle.textContent = winnerName
                 ? `${winnerName}님이 승리했습니다!`
                 : '빙판에서 밀려났습니다!';
+        }
+
+        // Show rankings
+        if (rankings && rankings.length > 0 && this.rankingList) {
+            this.rankingList.innerHTML = '';
+            const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+            rankings.forEach((player, index) => {
+                const item = document.createElement('div');
+                item.className = 'ranking-item';
+                const label = medals[index] || `${index + 1}`;
+                item.textContent = `${label} ${player.name}`;
+                this.rankingList.appendChild(item);
+            });
+            this.rankingList.classList.remove('hidden');
+        } else if (this.rankingList) {
+            this.rankingList.classList.add('hidden');
         }
 
         // 멀티플레이: 로비 버튼만, 싱글플레이: 다시하기 버튼만

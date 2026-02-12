@@ -401,9 +401,9 @@ network.onAllShots = ({ shots }) => {
     ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
 };
 
-network.onGameOver = ({ winner }) => {
+network.onGameOver = ({ winner, rankings }) => {
     const iWon = winner && winner.id === network.myId;
-    ui.showGameOver(iWon, winner ? winner.name : null, true);
+    ui.showGameOver(iWon, winner ? winner.name : null, true, rankings);
     gameState.state = States.GAME_OVER;
     controls.disable();
 };

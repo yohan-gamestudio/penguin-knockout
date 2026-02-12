@@ -51,6 +51,11 @@ function removePlayerFromRoom(socketId, roomCode) {
         sessions.delete(player.sessionToken);
     }
 
+    // Track elimination for disconnected player
+    if (room.state !== 'lobby' && player && player.alive) {
+        room.eliminationOrder.push({ name: player.name, penguinIndex: player.penguinIndex });
+    }
+
     room.players.delete(socketId);
 
     if (room.players.size === 0) {
@@ -78,8 +83,13 @@ function removePlayerFromRoom(socketId, roomCode) {
             room.players.forEach((p, id) => {
                 if (p.alive && !p.disconnected) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
             });
-            room.lastEvent = { type: 'game-over', data: { winner } };
-            io.to(roomCode).emit('game-over', { winner });
+            const rankings = [];
+            if (winner) rankings.push(winner);
+            for (let i = room.eliminationOrder.length - 1; i >= 0; i--) {
+                rankings.push(room.eliminationOrder[i]);
+            }
+            room.lastEvent = { type: 'game-over', data: { winner, rankings } };
+            io.to(roomCode).emit('game-over', { winner, rankings });
         }
     }
 }
@@ -109,7 +119,8 @@ io.on('connection', (socket) => {
             state: 'lobby',
             round: 0,
             hostId: socket.id,
-            lastEvent: null
+            lastEvent: null,
+            eliminationOrder: []
         };
         room.players.set(socket.id, {
             name, ready: false, shot: null, alive: true,
@@ -246,6 +257,7 @@ io.on('connection', (socket) => {
         if (connectedCount >= 2 && allReady) {
             room.state = 'playing';
             room.round = 0;
+            room.eliminationOrder = [];
 
             let idx = 0;
             room.players.forEach(p => {
@@ -317,6 +329,7 @@ io.on('connection', (socket) => {
         room.players.forEach(p => {
             if (eliminatedIndices.includes(p.penguinIndex)) {
                 p.alive = false;
+                room.eliminationOrder.push({ name: p.name, penguinIndex: p.penguinIndex });
             }
         });
 
@@ -329,8 +342,13 @@ io.on('connection', (socket) => {
             room.players.forEach((p, id) => {
                 if (p.alive) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
             });
-            room.lastEvent = { type: 'game-over', data: { winner } };
-            io.to(currentRoom).emit('game-over', { winner });
+            const rankings = [];
+            if (winner) rankings.push(winner);
+            for (let i = room.eliminationOrder.length - 1; i >= 0; i--) {
+                rankings.push(room.eliminationOrder[i]);
+            }
+            room.lastEvent = { type: 'game-over', data: { winner, rankings } };
+            io.to(currentRoom).emit('game-over', { winner, rankings });
         } else {
             startNewRound(currentRoom);
         }
@@ -372,6 +390,7 @@ io.on('connection', (socket) => {
         room.state = 'lobby';
         room.round = 0;
         room.lastEvent = null;
+        room.eliminationOrder = [];
 
         // Purge disconnected players before returning to lobby
         const toRemove = [];

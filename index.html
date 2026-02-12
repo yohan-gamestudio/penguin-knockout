@@ -105,6 +105,12 @@
 
         .lobby-hint { color: rgba(255,255,255,0.6); font-size: 1em; margin-top: 10px; }
 
+        /* Rankings */
+        #ranking-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; width: 300px; }
+        .ranking-item { padding: 12px 20px; background: rgba(20,20,60,0.6); border-radius: 8px;
+            font-size: 1.2em; text-align: center; }
+        .ranking-item:first-child { background: rgba(255,200,0,0.2); border: 1px solid rgba(255,200,0,0.4); }
+
         /* Reconnect banner */
         #reconnect-banner { position: fixed; top: 0; left: 0; width: 100%; padding: 16px;
             background: rgba(255,160,0,0.9); color: white; text-align: center; font-size: 1.1em;
@@ -177,6 +183,7 @@
     <div id="gameover-screen" class="screen-overlay hidden">
         <h1 id="gameover-title">🏆 승리!</h1>
         <p id="gameover-subtitle"></p>
+        <div id="ranking-list" class="hidden"></div>
         <button id="restart-btn">다시 하기</button>
         <button id="return-lobby-btn" class="back-btn">로비로 돌아가기</button>
     </div>
