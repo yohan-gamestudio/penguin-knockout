@@ -96,17 +96,10 @@ export class AimControls {
             this.aimDirection.copy(dragDir).normalize();
             this.hasAim = true;
 
-            // Update arrow visual
             this.arrowHelper.visible = true;
             this.arrowHelper.setDirection(this.aimDirection);
-
-            const arrowLength = Math.min(dragDir.length() * 0.5, 5);
-            this.arrowHelper.setLength(arrowLength, arrowLength * 0.2, arrowLength * 0.12);
-
-            // Color based on drag distance (green to red)
-            const t = Math.min(dragDir.length() / 10, 1);
-            const color = new THREE.Color().setHSL(0.33 * (1 - t), 1, 0.5);
-            this.arrowHelper.setColor(color);
+            this.arrowHelper.setLength(3, 0.6, 0.3);
+            this.arrowHelper.setColor(0x00ff44);
         } else {
             this.arrowHelper.visible = false;
             this.hasAim = false;
