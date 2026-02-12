@@ -118,13 +118,17 @@ export class PhysicsWorld {
         // Release Y-axis lock when penguin goes past platform edge → allow falling
         for (const body of this.penguinBodies) {
             const r = Math.sqrt(body.position.x ** 2 + body.position.z ** 2);
+            // 모서리 경사 시뮬레이션 - 가장자리 2유닛 전부터 점진적 바깥 힘
+            const edgeStart = PLATFORM_RADIUS - 2;
+            if (r > edgeStart && body.linearFactor.y === 0) {
+                const edgeFactor = (r - edgeStart) / 2; // 0 → 1
+                const outX = (body.position.x / r) * edgeFactor * 15;
+                const outZ = (body.position.z / r) * edgeFactor * 15;
+                body.applyForce(new CANNON.Vec3(outX, 0, outZ));
+            }
             if (r > PLATFORM_RADIUS - 0.3 && body.linearFactor.y === 0) {
                 // Past the edge - unlock Y to allow gravity/falling
                 body.linearFactor.set(1, 1, 1);
-                // 바깥 방향으로 impulse 한 번 적용 - 자연스럽게 밀려나가는 효과
-                const outX = body.position.x / r;
-                const outZ = body.position.z / r;
-                body.applyImpulse(new CANNON.Vec3(outX * 3, 2, outZ * 3));
             }
         }
     }
