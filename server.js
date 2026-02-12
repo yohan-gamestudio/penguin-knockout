@@ -78,6 +78,7 @@ function removePlayerFromRoom(socketId, roomCode) {
             room.players.forEach((p, id) => {
                 if (p.alive && !p.disconnected) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
             });
+            room.lastEvent = { type: 'game-over', data: { winner } };
             io.to(roomCode).emit('game-over', { winner });
         }
     }
@@ -92,6 +93,7 @@ function startNewRound(roomCode) {
 
     room.players.forEach(p => { p.shot = null; });
 
+    room.lastEvent = { type: 'round-start', data: { round: room.round } };
     io.to(roomCode).emit('round-start', { round: room.round });
 }
 
@@ -106,7 +108,8 @@ io.on('connection', (socket) => {
             players: new Map(),
             state: 'lobby',
             round: 0,
-            hostId: socket.id
+            hostId: socket.id,
+            lastEvent: null
         };
         room.players.set(socket.id, {
             name, ready: false, shot: null, alive: true,
@@ -210,7 +213,8 @@ io.on('connection', (socket) => {
             players: playerList,
             hostId: room.hostId,
             myPenguinIndex: player.penguinIndex,
-            myName: player.name
+            myName: player.name,
+            lastEvent: room.lastEvent
         });
 
         broadcastRoomUpdate(session.roomCode);
@@ -256,6 +260,7 @@ io.on('connection', (socket) => {
                 playerList.push({ id, name: p.name, penguinIndex: p.penguinIndex, alive: true });
             });
 
+            room.lastEvent = { type: 'game-start', data: { players: playerList } };
             io.to(currentRoom).emit('game-start', { players: playerList });
 
             setTimeout(() => {
@@ -297,6 +302,7 @@ io.on('connection', (socket) => {
                 }
             });
 
+            room.lastEvent = { type: 'all-shots', data: { shots } };
             io.to(currentRoom).emit('all-shots', { shots });
         }
     });
@@ -323,6 +329,7 @@ io.on('connection', (socket) => {
             room.players.forEach((p, id) => {
                 if (p.alive) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
             });
+            room.lastEvent = { type: 'game-over', data: { winner } };
             io.to(currentRoom).emit('game-over', { winner });
         } else {
             startNewRound(currentRoom);
@@ -364,6 +371,7 @@ io.on('connection', (socket) => {
 
         room.state = 'lobby';
         room.round = 0;
+        room.lastEvent = null;
 
         // Purge disconnected players before returning to lobby
         const toRemove = [];

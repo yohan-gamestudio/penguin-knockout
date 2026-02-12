@@ -416,16 +416,75 @@ network.onReconnectSuccess = (data) => {
     playerName = data.myName || '';
 
     if (data.state === 'lobby') {
+        gameState.reset();
+        controls.disable();
+        penguins.forEach(p => scene.remove(p.mesh));
+        penguins = [];
+        physics.reset();
+        physics.createPlatformBody();
         ui.showLobby(data.roomCode);
         ui.updateLobbyPlayers(data.players);
     } else if (data.state === 'gameover') {
-        const me = data.players.find(p => p.id === network.myId);
-        const iWon = me ? me.alive : false;
-        ui.showGameOver(iWon, null, true);
+        const winner = data.lastEvent && data.lastEvent.type === 'game-over' ? data.lastEvent.data.winner : null;
+        const iWon = winner && winner.id === network.myId;
+        ui.showGameOver(iWon, winner ? winner.name : null, true);
+        controls.disable();
     } else {
-        // Playing state (aiming/sliding) - show lobby as safe fallback
-        ui.showLobby(data.roomCode);
-        ui.updateLobbyPlayers(data.players);
+        // Game in progress - restore state from server
+        // Recreate penguins if they don't exist (missed game-start)
+        if (penguins.length === 0 || !gameState.multiplayer) {
+            gameState.multiplayer = true;
+            createMultiplayerPenguins(data.players);
+            gameState.penguins = penguins;
+        }
+        gameState.round = data.round;
+
+        // Sync alive status from server (authoritative)
+        for (const sp of data.players) {
+            const penguin = penguins.find(p => p.penguinIndex === sp.penguinIndex);
+            if (penguin) {
+                penguin.alive = sp.alive;
+                if (!sp.alive) penguin.mesh.visible = false;
+            }
+        }
+        gameState.penguins = penguins;
+
+        // Replay the last critical event to restore correct phase
+        if (data.lastEvent) {
+            switch (data.lastEvent.type) {
+                case 'round-start': {
+                    gameState.round = data.lastEvent.data.round;
+                    controls.hideArrow();
+                    gameState.transition(States.AIMING);
+                    const myPenguin = penguins.find(p => p.penguinIndex === network.myPenguinIndex);
+                    if (myPenguin && myPenguin.alive) {
+                        controls.setPlayerPosition(myPenguin.mesh.position);
+                        controls.enable();
+                    }
+                    ui.showAiming(gameState.round, gameState.getAlivePenguins().length);
+                    break;
+                }
+                case 'all-shots': {
+                    controls.disable();
+                    for (const shot of data.lastEvent.data.shots) {
+                        const penguin = penguins.find(p => p.penguinIndex === shot.penguinIndex);
+                        if (penguin && penguin.alive) {
+                            physics.launchPenguin(penguin.body, shot.dirX, shot.dirZ, shot.power);
+                        }
+                    }
+                    gameState.startSliding();
+                    ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
+                    break;
+                }
+                case 'game-over': {
+                    const winner = data.lastEvent.data.winner;
+                    const iWon = winner && winner.id === network.myId;
+                    ui.showGameOver(iWon, winner ? winner.name : null, true);
+                    controls.disable();
+                    break;
+                }
+            }
+        }
     }
 };
 
