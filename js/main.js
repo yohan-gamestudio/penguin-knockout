@@ -8,6 +8,7 @@ import { GameState, States } from './gameState.js';
 import { CameraRig } from './camera.js';
 import { UIManager } from './ui.js';
 import { EffectsManager } from './effects.js';
+import { NetworkManager } from './network.js';
 
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -55,8 +56,10 @@ const ai = new AIController();
 const gameState = new GameState();
 const ui = new UIManager();
 const effects = new EffectsManager(scene);
+const network = new NetworkManager();
 
 let penguins = [];
+let playerName = '';
 
 function createAllPenguins() {
     penguins.forEach(p => {
@@ -92,6 +95,44 @@ function createAllPenguins() {
     return penguins;
 }
 
+function createMultiplayerPenguins(serverPlayers) {
+    penguins.forEach(p => {
+        scene.remove(p.mesh);
+    });
+    physics.reset();
+    physics.createPlatformBody();
+    penguins = [];
+
+    const COLORS = [PENGUIN_COLORS.player, PENGUIN_COLORS.ai1, PENGUIN_COLORS.ai2, PENGUIN_COLORS.ai3];
+    const POSITIONS = [
+        { x: 0, z: -6 },
+        { x: 6, z: 0 },
+        { x: 0, z: 6 },
+        { x: -6, z: 0 }
+    ];
+
+    for (const sp of serverPlayers) {
+        const idx = sp.penguinIndex;
+        const mesh = createPenguin(COLORS[idx]);
+        mesh.position.set(POSITIONS[idx].x, 0.6, POSITIONS[idx].z);
+        scene.add(mesh);
+
+        const body = physics.createPenguinBody(POSITIONS[idx].x, 0.6, POSITIONS[idx].z);
+
+        penguins.push({
+            mesh,
+            body,
+            alive: true,
+            isPlayer: sp.id === network.myId,
+            penguinIndex: idx,
+            playerId: sp.id,
+            playerName: sp.name
+        });
+    }
+
+    return penguins;
+}
+
 physics.onCollision((bodyA, bodyB, contactPoint) => {
     effects.spawnCollisionBurst(contactPoint);
 });
@@ -109,10 +150,12 @@ gameState.onStateChange = (newState, oldState) => {
         case States.AIMING: {
             const alive = gameState.getAlivePenguins();
             ui.showAiming(gameState.round, alive.length);
-            const player = penguins.find(p => p.isPlayer && p.alive);
-            if (player) {
-                controls.setPlayerPosition(player.mesh.position);
-                controls.enable();
+            if (!gameState.multiplayer) {
+                const player = penguins.find(p => p.isPlayer && p.alive);
+                if (player) {
+                    controls.setPlayerPosition(player.mesh.position);
+                    controls.enable();
+                }
             }
             cameraRig.setOverview();
             break;
@@ -165,13 +208,54 @@ gameState.onStateChange = (newState, oldState) => {
     }
 };
 
+ui.onNameSubmit = (name) => {
+    playerName = name;
+    ui.showRoomScreen();
+};
+
+ui.onCreateRoom = () => {
+    network.createRoom(playerName);
+};
+
+ui.onJoinRoom = (code) => {
+    network.joinRoom(playerName, code);
+};
+
+ui.onReady = () => {
+    network.toggleReady();
+};
+
+ui.onReturnToLobby = () => {
+    network.returnToLobby();
+};
+
 ui.onStart = () => {
     const allPenguins = createAllPenguins();
+    gameState.multiplayer = false;
     gameState.startGame(allPenguins);
 };
 
 ui.onLaunch = () => {
-    if (gameState.state === States.AIMING) {
+    if (gameState.state !== States.AIMING) return;
+
+    if (gameState.multiplayer) {
+        const aim = controls.getAimDirection();
+        const power = ui.getPowerLevel();
+
+        if (controls.hasAim) {
+            network.submitShot(aim.x, aim.z, power);
+        } else {
+            const myPenguin = penguins.find(p => p.penguinIndex === network.myPenguinIndex);
+            if (myPenguin) {
+                const dx = -myPenguin.mesh.position.x;
+                const dz = -myPenguin.mesh.position.z;
+                const len = Math.sqrt(dx*dx + dz*dz) || 1;
+                network.submitShot(dx/len, dz/len, power);
+            }
+        }
+        controls.disable();
+        ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
+    } else {
         gameState.launch();
     }
 };
@@ -179,6 +263,7 @@ ui.onLaunch = () => {
 ui.onRestart = () => {
     gameState.reset();
     const allPenguins = createAllPenguins();
+    gameState.multiplayer = false;
     gameState.startGame(allPenguins);
 };
 
@@ -211,7 +296,7 @@ function gameLoop() {
 
     syncMeshes();
 
-    gameState.update(dt, physics);
+    gameState.update(dt, physics, network);
 
     cameraRig.update(dt);
 
@@ -240,5 +325,70 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-ui.showMenu();
+network.onRoomCreated = (code) => {
+    ui.showLobby(code);
+};
+
+network.onRoomJoined = (code) => {
+    ui.showLobby(code);
+};
+
+network.onJoinError = (msg) => {
+    ui.showRoomError(msg);
+};
+
+network.onRoomUpdate = (data) => {
+    if (data.state === 'lobby') {
+        gameState.reset();
+        controls.disable();
+        penguins.forEach(p => scene.remove(p.mesh));
+        penguins = [];
+        physics.reset();
+        physics.createPlatformBody();
+        ui.showLobby(data.roomCode);
+    }
+    ui.updateLobbyPlayers(data.players);
+};
+
+network.onGameStart = ({ players }) => {
+    gameState.multiplayer = true;
+    const multiplayerPenguins = createMultiplayerPenguins(players);
+    gameState.penguins = multiplayerPenguins;
+    gameState.round = 0;
+    gameState.state = States.MENU;
+};
+
+network.onRoundStart = ({ round }) => {
+    gameState.round = round;
+    gameState.transition(States.AIMING);
+    const myPenguin = penguins.find(p => p.penguinIndex === network.myPenguinIndex);
+    if (myPenguin && myPenguin.alive) {
+        controls.setPlayerPosition(myPenguin.mesh.position);
+        controls.enable();
+    }
+    ui.showAiming(round, gameState.getAlivePenguins().length);
+};
+
+network.onAllShots = ({ shots }) => {
+    controls.disable();
+    for (const shot of shots) {
+        const penguin = penguins.find(p => p.penguinIndex === shot.penguinIndex);
+        if (penguin && penguin.alive) {
+            physics.launchPenguin(penguin.body, shot.dirX, shot.dirZ, shot.power);
+            effects.spawnLaunchTrail(penguin.mesh.position, { x: shot.dirX, z: shot.dirZ });
+        }
+    }
+    gameState.startSliding();
+    ui.showSliding(gameState.round, gameState.getAlivePenguins().length);
+};
+
+network.onGameOver = ({ winner }) => {
+    const iWon = winner && winner.id === network.myId;
+    ui.showGameOver(iWon, winner ? winner.name : null);
+    controls.disable();
+};
+
+network.connect();
+
+ui.showNameScreen();
 gameLoop();

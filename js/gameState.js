@@ -18,6 +18,7 @@ export class GameState {
         this.roundStartTimer = 0;
         this.roundStartDuration = 1.5;
         this.onStateChange = null;
+        this.multiplayer = false;
     }
 
     transition(newState) {
@@ -38,7 +39,7 @@ export class GameState {
         this.transition(States.ROUND_START);
     }
 
-    update(dt, physics) {
+    update(dt, physics, network = null) {
         switch (this.state) {
             case States.ROUND_START:
                 this.roundStartTimer += dt;
@@ -55,7 +56,7 @@ export class GameState {
                 break;
 
             case States.CHECK_ELIMINATIONS:
-                this.checkEliminations(physics);
+                this.checkEliminations(physics, network);
                 break;
         }
     }
@@ -70,19 +71,30 @@ export class GameState {
         this.transition(States.SLIDING);
     }
 
-    checkEliminations(physics) {
+    checkEliminations(physics, network = null) {
+        const eliminated = [];
         for (const p of this.penguins) {
             if (!p.alive) continue;
             if (!physics.isOnPlatform(p.body)) {
                 p.alive = false;
+                if (this.multiplayer && p.penguinIndex !== undefined) {
+                    eliminated.push(p.penguinIndex);
+                }
             }
         }
 
-        const alive = this.penguins.filter(p => p.alive);
-        if (alive.length <= 1) {
-            this.transition(States.GAME_OVER);
+        if (this.multiplayer && network) {
+            if (network.isHost) {
+                network.reportRoundResults(eliminated);
+            }
+            this.state = States.SLIDING;
         } else {
-            this.startNewRound();
+            const alive = this.penguins.filter(p => p.alive);
+            if (alive.length <= 1) {
+                this.transition(States.GAME_OVER);
+            } else {
+                this.startNewRound();
+            }
         }
     }
 
