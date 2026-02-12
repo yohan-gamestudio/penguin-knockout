@@ -142,7 +142,7 @@ export class UIManager {
         }, 1200);
     }
 
-    showGameOver(playerWon, winnerName = null) {
+    showGameOver(playerWon, winnerName = null, isMultiplayer = false) {
         this.hideAllScreens();
         this.gameoverScreen.classList.remove('hidden');
         if (playerWon) {
@@ -153,6 +153,15 @@ export class UIManager {
             this.gameoverSubtitle.textContent = winnerName
                 ? `${winnerName}님이 승리했습니다!`
                 : '빙판에서 밀려났습니다!';
+        }
+
+        // 멀티플레이: 로비 버튼만, 싱글플레이: 다시하기 버튼만
+        if (isMultiplayer) {
+            this.restartBtn.classList.add('hidden');
+            this.returnLobbyBtn.classList.remove('hidden');
+        } else {
+            this.restartBtn.classList.remove('hidden');
+            this.returnLobbyBtn.classList.add('hidden');
         }
     }
 

@@ -137,5 +137,11 @@ export class PhysicsWorld {
             this.world.removeBody(body);
         }
         this.penguinBodies = [];
+
+        // Remove platform body to prevent duplicates on restart
+        if (this.platformBody) {
+            this.world.removeBody(this.platformBody);
+            this.platformBody = null;
+        }
     }
 }

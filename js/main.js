@@ -201,7 +201,7 @@ gameState.onStateChange = (newState, oldState) => {
 
         case States.GAME_OVER: {
             const playerWon = gameState.isPlayerAlive();
-            ui.showGameOver(playerWon);
+            ui.showGameOver(playerWon, null, gameState.multiplayer);
             controls.disable();
             break;
         }
@@ -262,6 +262,8 @@ ui.onLaunch = () => {
 
 ui.onRestart = () => {
     gameState.reset();
+    controls.reset();
+    ui.hideAllScreens();
     const allPenguins = createAllPenguins();
     gameState.multiplayer = false;
     gameState.startGame(allPenguins);
@@ -384,7 +386,7 @@ network.onAllShots = ({ shots }) => {
 
 network.onGameOver = ({ winner }) => {
     const iWon = winner && winner.id === network.myId;
-    ui.showGameOver(iWon, winner ? winner.name : null);
+    ui.showGameOver(iWon, winner ? winner.name : null, true);
     controls.disable();
 };
 
