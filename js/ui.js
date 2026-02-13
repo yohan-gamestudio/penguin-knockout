@@ -19,6 +19,13 @@ export class UIManager {
         this.restartBtn = document.getElementById('restart-btn');
         this.aimHint = document.getElementById('aim-hint');
 
+        // Score board & round end
+        this.scoreBoard = document.getElementById('score-board');
+        this.roundEndScreen = document.getElementById('round-end-screen');
+        this.roundEndTitle = document.getElementById('round-end-title');
+        this.roundEndScores = document.getElementById('round-end-scores');
+        this.roundEndNext = document.getElementById('round-end-next');
+
         // Multiplayer elements
         this.nameScreen = document.getElementById('name-screen');
         this.nameInput = document.getElementById('name-input');
@@ -163,64 +170,112 @@ export class UIManager {
         this.hudElement.classList.add('hidden');
         this.bottomControls.classList.add('hidden');
         this.gameoverScreen.classList.add('hidden');
+        this.scoreBoard.classList.add('hidden');
     }
 
-    showAiming(round, aliveCount, isMultiplayer = false) {
+    showAiming(round, turn, aliveCount, maxRounds = null) {
         this.hideAllScreens();
         this.hudElement.classList.remove('hidden');
         this.bottomControls.classList.remove('hidden');
-        this.roundDisplay.textContent = isMultiplayer ? `라운드 ${round}/10` : `라운드 ${round}`;
+        this.scoreBoard.classList.remove('hidden');
+        this.roundDisplay.textContent = maxRounds
+            ? `라운드 ${round}/${maxRounds} - 턴 ${turn}`
+            : `라운드 ${round} - 턴 ${turn}`;
         this.aliveDisplay.textContent = `🐧 x${aliveCount}`;
         this.aimHint.textContent = '드래그하여 방향을 정하세요';
     }
 
-    showSliding(round, aliveCount, isMultiplayer = false) {
+    showSliding(round, turn, aliveCount, maxRounds = null) {
         this.bottomControls.classList.add('hidden');
-        this.roundDisplay.textContent = isMultiplayer ? `라운드 ${round}/10` : `라운드 ${round}`;
+        this.roundDisplay.textContent = maxRounds
+            ? `라운드 ${round}/${maxRounds} - 턴 ${turn}`
+            : `라운드 ${round} - 턴 ${turn}`;
         this.aliveDisplay.textContent = `🐧 x${aliveCount}`;
     }
 
-    showRoundBanner(round) {
-        this.roundBanner.textContent = `라운드 ${round}`;
+    showRoundBanner(round, maxRounds = null) {
+        this.roundBanner.textContent = maxRounds
+            ? `라운드 ${round}/${maxRounds}`
+            : `라운드 ${round}`;
         this.roundBanner.classList.add('show');
         setTimeout(() => {
             this.roundBanner.classList.remove('show');
         }, 1200);
     }
 
-    showGameOver(playerWon, winnerName = null, isMultiplayer = false, rankings = null, maxRounds = false) {
+    showTurnBanner(turn) {
+        this.roundBanner.textContent = `턴 ${turn}`;
+        this.roundBanner.classList.add('show');
+        setTimeout(() => {
+            this.roundBanner.classList.remove('show');
+        }, 600);
+    }
+
+    showRoundEnd(winnerName, round, scores, playerNames, isFinalRound = false) {
         this.hideAllScreens();
-        this.gameoverScreen.classList.remove('hidden');
-        if (maxRounds) {
-            this.gameoverTitle.textContent = '⏰ 10라운드 종료!';
-            this.gameoverSubtitle.textContent = '최대 라운드에 도달했습니다';
-        } else if (playerWon) {
-            this.gameoverTitle.textContent = '🏆 승리!';
-            this.gameoverSubtitle.textContent = '모든 상대 펭귄을 밀어냈습니다!';
-        } else {
-            this.gameoverTitle.textContent = winnerName
-                ? `🏆 ${winnerName} 승리!`
-                : '게임 종료';
-            this.gameoverSubtitle.textContent = '';
+        this.roundEndScreen.classList.remove('hidden');
+        this.roundEndTitle.textContent = winnerName
+            ? `🏆 ${winnerName} 라운드 ${round} 승리!`
+            : `라운드 ${round} 종료 (무승부)`;
+
+        // Build score display sorted by score desc
+        this.roundEndScores.innerHTML = '';
+        const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        for (const [id, score] of sorted) {
+            const name = playerNames[id] || id;
+            const item = document.createElement('div');
+            item.className = 'round-end-score-item';
+            item.textContent = `${name}: ${score}점`;
+            this.roundEndScores.appendChild(item);
         }
 
-        // Show rankings
-        if (rankings && rankings.length > 0 && this.rankingList) {
+        this.roundEndNext.textContent = isFinalRound
+            ? '최종 결과 집계중...'
+            : '다음 라운드 준비중...';
+    }
+
+    updateScoreBoard(scores, playerNames, playerColors) {
+        this.scoreBoard.innerHTML = '';
+        const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        for (const [id, score] of sorted) {
+            const item = document.createElement('div');
+            item.className = 'score-board-item';
+            const colorDot = document.createElement('span');
+            colorDot.className = 'score-color-dot';
+            colorDot.style.backgroundColor = playerColors[id] || '#fff';
+            item.appendChild(colorDot);
+            item.appendChild(document.createTextNode(` ${playerNames[id] || id}: ${score}`));
+            this.scoreBoard.appendChild(item);
+        }
+    }
+
+    showGameOver(overallWinner, scores, playerNames, isMultiplayer) {
+        this.hideAllScreens();
+        this.gameoverScreen.classList.remove('hidden');
+
+        if (overallWinner) {
+            this.gameoverTitle.textContent = `🏆 ${overallWinner.name} 최종 우승!`;
+        } else {
+            this.gameoverTitle.textContent = '게임 종료';
+        }
+        this.gameoverSubtitle.textContent = '최종 점수';
+
+        // Show final scores as rankings
+        if (this.rankingList) {
             this.rankingList.innerHTML = '';
+            const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
             const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
-            rankings.forEach((player, index) => {
+            sorted.forEach(([id, score], index) => {
                 const item = document.createElement('div');
                 item.className = 'ranking-item';
-                const label = medals[index] || `${index + 1}`;
-                item.textContent = `${label} ${player.name}`;
+                const medal = medals[index] || `${index + 1}`;
+                const name = playerNames[id] || id;
+                item.textContent = `${medal} ${name} - ${score}점`;
                 this.rankingList.appendChild(item);
             });
             this.rankingList.classList.remove('hidden');
-        } else if (this.rankingList) {
-            this.rankingList.classList.add('hidden');
         }
 
-        // 멀티플레이: 로비 버튼만, 싱글플레이: 다시하기 버튼만
         if (isMultiplayer) {
             this.restartBtn.classList.add('hidden');
             this.returnLobbyBtn.classList.remove('hidden');
@@ -244,8 +299,10 @@ export class UIManager {
         this.lobbyScreen.classList.add('hidden');
         this.menuScreen.classList.add('hidden');
         this.gameoverScreen.classList.add('hidden');
+        this.roundEndScreen.classList.add('hidden');
         this.hudElement.classList.add('hidden');
         this.bottomControls.classList.add('hidden');
+        this.scoreBoard.classList.add('hidden');
         this.passwordModal.classList.add('hidden');
     }
 

@@ -147,6 +147,26 @@
         .password-modal-buttons button:first-child { background: #4488ff; }
         .password-modal-buttons button:first-child:hover { background: #5599ff; transform: scale(1.05); }
 
+        /* Score board (HUD top-right) */
+        #score-board { position: fixed; top: 50px; right: 16px; z-index: 10;
+            background: rgba(0,0,0,0.5); border-radius: 10px; padding: 10px 14px;
+            backdrop-filter: blur(4px); min-width: 120px; pointer-events: none; }
+        .score-board-item { display: flex; align-items: center; gap: 8px;
+            color: white; font-size: 0.95em; padding: 3px 0; }
+        .score-color-dot { width: 12px; height: 12px; border-radius: 50%;
+            display: inline-block; flex-shrink: 0; }
+
+        /* Round end screen */
+        #round-end-screen h1 { font-size: 2.5em; }
+        .round-end-scores { display: flex; flex-direction: column; gap: 8px;
+            margin-bottom: 24px; width: 300px; }
+        .round-end-score-item { padding: 12px 20px; background: rgba(20,20,60,0.6);
+            border-radius: 8px; font-size: 1.2em; text-align: center; color: white; }
+        .round-end-score-item:first-child { background: rgba(255,200,0,0.2);
+            border: 1px solid rgba(255,200,0,0.4); }
+        #round-end-next { color: rgba(255,255,255,0.6); font-size: 1em;
+            animation: pulse-banner 1.5s ease-in-out infinite; }
+
         /* Reconnect banner */
         #reconnect-banner { position: fixed; top: 0; left: 0; width: 100%; padding: 16px;
             background: rgba(255,160,0,0.9); color: white; text-align: center; font-size: 1.1em;
@@ -221,6 +241,7 @@
             <span id="alive-display">🐧 x4</span>
         </div>
     </div>
+    <div id="score-board" class="hidden"></div>
 
     <!-- Bottom Controls (aiming phase) -->
     <div id="bottom-controls" class="hidden">
@@ -234,6 +255,13 @@
 
     <!-- Round Banner -->
     <div id="round-banner"></div>
+
+    <!-- Round End -->
+    <div id="round-end-screen" class="screen-overlay hidden">
+        <h1 id="round-end-title"></h1>
+        <div id="round-end-scores" class="round-end-scores"></div>
+        <p id="round-end-next">다음 라운드 준비중...</p>
+    </div>
 
     <!-- Game Over -->
     <div id="gameover-screen" class="screen-overlay hidden">

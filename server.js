@@ -12,7 +12,8 @@ app.use(express.static('.'));
 const rooms = new Map();
 const sessions = new Map(); // sessionToken -> { socketId, roomCode, playerName }
 const RECONNECT_GRACE_MS = 30000;
-const MAX_ROUNDS = 10;
+const DEFAULT_MAX_ROUNDS = 3;
+const MAX_TURNS_PER_ROUND = 30;
 
 function generateRoomCode() {
     let code;
@@ -29,7 +30,6 @@ function broadcastRoomList() {
         room.players.forEach(p => {
             if (!hostName) hostName = p.name;
         });
-        // Find host name specifically
         const hostPlayer = room.players.get(room.hostId);
         if (hostPlayer) hostName = hostPlayer.name;
 
@@ -62,8 +62,10 @@ function broadcastRoomUpdate(roomCode) {
         players: playerList,
         state: room.state,
         round: room.round,
-        maxRounds: MAX_ROUNDS,
-        hostId: room.hostId
+        turn: room.turn,
+        maxRounds: room.maxRounds,
+        hostId: room.hostId,
+        scores: room.scores
     });
 }
 
@@ -89,7 +91,6 @@ function removePlayerFromRoom(socketId, roomCode) {
         console.log(`Room ${roomCode} deleted (empty)`);
     } else {
         if (room.hostId === socketId) {
-            // Reassign host to first connected player
             for (const [id, p] of room.players) {
                 if (!p.disconnected) {
                     room.hostId = id;
@@ -110,13 +111,12 @@ function removePlayerFromRoom(socketId, roomCode) {
             room.players.forEach((p, id) => {
                 if (p.alive && !p.disconnected) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
             });
-            const rankings = [];
-            if (winner) rankings.push(winner);
-            for (let i = room.eliminationOrder.length - 1; i >= 0; i--) {
-                rankings.push(room.eliminationOrder[i]);
+            // Award round win to last standing
+            if (winner) {
+                room.scores[winner.id] = (room.scores[winner.id] || 0) + 1;
             }
-            room.lastEvent = { type: 'game-over', data: { winner, rankings } };
-            io.to(roomCode).emit('game-over', { winner, rankings });
+            room.lastEvent = { type: 'game-over', data: { winner, scores: { ...room.scores } } };
+            io.to(roomCode).emit('game-over', { winner, scores: { ...room.scores } });
         }
     }
 }
@@ -126,12 +126,38 @@ function startNewRound(roomCode) {
     if (!room) return;
 
     room.round++;
+    room.turn = 0;
+    room.eliminationOrder = [];
+    room.state = 'round_intro';
+
+    // Respawn all players
+    room.players.forEach(p => {
+        p.alive = true;
+        p.shot = null;
+    });
+
+    room.lastEvent = { type: 'round-start', data: { round: room.round, scores: { ...room.scores } } };
+    io.to(roomCode).emit('round-start', { round: room.round, scores: { ...room.scores } });
+
+    // After intro duration, start first turn
+    setTimeout(() => {
+        if (room.state === 'round_intro') {
+            startNewTurn(roomCode);
+        }
+    }, 1500);
+}
+
+function startNewTurn(roomCode) {
+    const room = rooms.get(roomCode);
+    if (!room) return;
+
+    room.turn++;
     room.state = 'round_aiming';
 
     room.players.forEach(p => { p.shot = null; });
 
-    room.lastEvent = { type: 'round-start', data: { round: room.round } };
-    io.to(roomCode).emit('round-start', { round: room.round });
+    room.lastEvent = { type: 'turn-start', data: { round: room.round, turn: room.turn } };
+    io.to(roomCode).emit('turn-start', { round: room.round, turn: room.turn });
 }
 
 io.on('connection', (socket) => {
@@ -161,6 +187,9 @@ io.on('connection', (socket) => {
             players: new Map(),
             state: 'lobby',
             round: 0,
+            turn: 0,
+            maxRounds: DEFAULT_MAX_ROUNDS,
+            scores: {},
             hostId: socket.id,
             lastEvent: null,
             eliminationOrder: [],
@@ -271,6 +300,9 @@ io.on('connection', (socket) => {
             roomCode: session.roomCode,
             state: room.state,
             round: room.round,
+            turn: room.turn,
+            maxRounds: room.maxRounds,
+            scores: { ...room.scores },
             players: playerList,
             hostId: room.hostId,
             myPenguinIndex: player.penguinIndex,
@@ -307,14 +339,17 @@ io.on('connection', (socket) => {
         if (connectedCount >= 2 && allReady) {
             room.state = 'playing';
             room.round = 0;
+            room.turn = 0;
             room.eliminationOrder = [];
+            room.scores = {};
 
             let idx = 0;
-            room.players.forEach(p => {
+            room.players.forEach((p, id) => {
                 p.penguinIndex = idx++;
                 p.alive = true;
                 p.ready = false;
                 p.shot = null;
+                room.scores[id] = 0;
             });
 
             const playerList = [];
@@ -322,8 +357,8 @@ io.on('connection', (socket) => {
                 playerList.push({ id, name: p.name, penguinIndex: p.penguinIndex, alive: true });
             });
 
-            room.lastEvent = { type: 'game-start', data: { players: playerList } };
-            io.to(currentRoom).emit('game-start', { players: playerList });
+            room.lastEvent = { type: 'game-start', data: { players: playerList, maxRounds: room.maxRounds } };
+            io.to(currentRoom).emit('game-start', { players: playerList, maxRounds: room.maxRounds });
             broadcastRoomList();
 
             setTimeout(() => {
@@ -346,7 +381,6 @@ io.on('connection', (socket) => {
 
         let allSubmitted = true;
         room.players.forEach(p => {
-            // Skip disconnected players in allSubmitted check
             if (p.alive && !p.shot && !p.disconnected) allSubmitted = false;
         });
 
@@ -385,35 +419,89 @@ io.on('connection', (socket) => {
         });
 
         let aliveCount = 0;
-        room.players.forEach(p => { if (p.alive) aliveCount++; });
+        let lastAlive = null;
+        room.players.forEach((p, id) => {
+            if (p.alive) {
+                aliveCount++;
+                lastAlive = { id, name: p.name, penguinIndex: p.penguinIndex };
+            }
+        });
 
         if (aliveCount <= 1) {
-            room.state = 'gameover';
-            let winner = null;
-            room.players.forEach((p, id) => {
-                if (p.alive) winner = { id, name: p.name, penguinIndex: p.penguinIndex };
-            });
-            const rankings = [];
-            if (winner) rankings.push(winner);
-            for (let i = room.eliminationOrder.length - 1; i >= 0; i--) {
-                rankings.push(room.eliminationOrder[i]);
+            // Round over
+            let roundWinner = lastAlive;
+            if (roundWinner) {
+                room.scores[roundWinner.id] = (room.scores[roundWinner.id] || 0) + 1;
             }
-            room.lastEvent = { type: 'game-over', data: { winner, rankings } };
-            io.to(currentRoom).emit('game-over', { winner, rankings });
-        } else if (room.round >= MAX_ROUNDS) {
-            // Max rounds reached - game over as draw
-            room.state = 'gameover';
-            const rankings = [];
-            room.players.forEach((p, id) => {
-                if (p.alive) rankings.push({ id, name: p.name, penguinIndex: p.penguinIndex });
+
+            room.state = 'round_end';
+
+            room.lastEvent = {
+                type: 'round-end',
+                data: { roundWinner, round: room.round, scores: { ...room.scores } }
+            };
+            io.to(currentRoom).emit('round-end', {
+                roundWinner, round: room.round, scores: { ...room.scores }
             });
-            for (let i = room.eliminationOrder.length - 1; i >= 0; i--) {
-                rankings.push(room.eliminationOrder[i]);
-            }
-            room.lastEvent = { type: 'game-over', data: { winner: null, rankings, maxRounds: true } };
-            io.to(currentRoom).emit('game-over', { winner: null, rankings, maxRounds: true });
+
+            // After delay, start next round or game over
+            const savedRoom = currentRoom;
+            setTimeout(() => {
+                const r = rooms.get(savedRoom);
+                if (!r || r.state !== 'round_end') return;
+
+                if (r.round >= r.maxRounds) {
+                    // Game over - determine overall winner by score
+                    r.state = 'gameover';
+                    let overallWinner = null;
+                    let maxScore = -1;
+                    r.players.forEach((p, id) => {
+                        const s = r.scores[id] || 0;
+                        if (s > maxScore) {
+                            maxScore = s;
+                            overallWinner = { id, name: p.name, penguinIndex: p.penguinIndex, score: s };
+                        }
+                    });
+                    r.lastEvent = { type: 'game-over', data: { winner: overallWinner, scores: { ...r.scores } } };
+                    io.to(savedRoom).emit('game-over', { winner: overallWinner, scores: { ...r.scores } });
+                } else {
+                    startNewRound(savedRoom);
+                }
+            }, 3000);
+        } else if (room.turn >= MAX_TURNS_PER_ROUND) {
+            // Safety: too many turns, end round with no winner
+            room.state = 'round_end';
+            room.lastEvent = {
+                type: 'round-end',
+                data: { roundWinner: null, round: room.round, scores: { ...room.scores } }
+            };
+            io.to(currentRoom).emit('round-end', {
+                roundWinner: null, round: room.round, scores: { ...room.scores }
+            });
+
+            const savedRoom = currentRoom;
+            setTimeout(() => {
+                const r = rooms.get(savedRoom);
+                if (!r || r.state !== 'round_end') return;
+                if (r.round >= r.maxRounds) {
+                    r.state = 'gameover';
+                    let overallWinner = null;
+                    let maxScore = -1;
+                    r.players.forEach((p, id) => {
+                        const s = r.scores[id] || 0;
+                        if (s > maxScore) {
+                            maxScore = s;
+                            overallWinner = { id, name: p.name, penguinIndex: p.penguinIndex, score: s };
+                        }
+                    });
+                    r.lastEvent = { type: 'game-over', data: { winner: overallWinner, scores: { ...r.scores } } };
+                    io.to(savedRoom).emit('game-over', { winner: overallWinner, scores: { ...r.scores } });
+                } else {
+                    startNewRound(savedRoom);
+                }
+            }, 3000);
         } else {
-            startNewRound(currentRoom);
+            startNewTurn(currentRoom);
         }
     });
 
@@ -453,8 +541,10 @@ io.on('connection', (socket) => {
 
         room.state = 'lobby';
         room.round = 0;
+        room.turn = 0;
         room.lastEvent = null;
         room.eliminationOrder = [];
+        room.scores = {};
 
         // Purge disconnected players before returning to lobby
         const toRemove = [];

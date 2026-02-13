@@ -17,6 +17,8 @@ export class NetworkManager {
         this.onRoomList = null;
         this.onGameStart = null;
         this.onRoundStart = null;
+        this.onTurnStart = null;
+        this.onRoundEnd = null;
         this.onPlayerShotReady = null;
         this.onAllShots = null;
         this.onGameOver = null;
@@ -85,6 +87,14 @@ export class NetworkManager {
 
         this.socket.on('round-start', (data) => {
             if (this.onRoundStart) this.onRoundStart(data);
+        });
+
+        this.socket.on('turn-start', (data) => {
+            if (this.onTurnStart) this.onTurnStart(data);
+        });
+
+        this.socket.on('round-end', (data) => {
+            if (this.onRoundEnd) this.onRoundEnd(data);
         });
 
         this.socket.on('player-shot-ready', (data) => {
