@@ -15,7 +15,7 @@ export class GameState {
         this.state = States.MENU;
         this.round = 0;
         this.turn = 0;
-        this.maxRounds = 3;
+        this.maxRounds = 10;
         this.penguins = [];
         this.scores = {};
         this.roundWinner = null;
@@ -200,7 +200,7 @@ export class GameState {
         this.state = States.MENU;
         this.round = 0;
         this.turn = 0;
-        this.maxRounds = 3;
+        this.maxRounds = 10;
         this.penguins = [];
         this.scores = {};
         this.roundWinner = null;

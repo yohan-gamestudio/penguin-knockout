@@ -15,6 +15,7 @@ export class NetworkManager {
         this.onJoinError = null;
         this.onRoomUpdate = null;
         this.onRoomList = null;
+        this._roomPollInterval = null;
         this.onGameStart = null;
         this.onRoundStart = null;
         this.onTurnStart = null;
@@ -136,7 +137,29 @@ export class NetworkManager {
     }
 
     requestRoomList() {
-        this.socket.emit('get-rooms');
+        this._fetchRoomList();
+    }
+
+    startRoomPolling(intervalMs = 3000) {
+        this.stopRoomPolling();
+        this._fetchRoomList();
+        this._roomPollInterval = setInterval(() => this._fetchRoomList(), intervalMs);
+    }
+
+    stopRoomPolling() {
+        if (this._roomPollInterval) {
+            clearInterval(this._roomPollInterval);
+            this._roomPollInterval = null;
+        }
+    }
+
+    _fetchRoomList() {
+        fetch('/api/rooms')
+            .then(res => res.json())
+            .then(data => {
+                if (this.onRoomList) this.onRoomList(data);
+            })
+            .catch(() => {});
     }
 
     toggleReady() {

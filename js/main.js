@@ -278,7 +278,7 @@ gameState.onStateChange = (newState, oldState) => {
 ui.onNameSubmit = (name) => {
     playerName = name;
     ui.showRoomScreen();
-    network.requestRoomList();
+    network.startRoomPolling();
 };
 
 ui.onCreateRoom = (password) => {
@@ -300,7 +300,7 @@ ui.onReady = () => {
 ui.onLeaveRoom = () => {
     network.leaveRoom();
     ui.showRoomScreen();
-    network.requestRoomList();
+    network.startRoomPolling();
 };
 
 ui.onReturnToLobby = () => {
@@ -324,7 +324,7 @@ ui.onStart = () => {
         playerColors[id] = SCARF_COLORS[i];
     }
 
-    gameState.startGame(allPenguins, 3);
+    gameState.startGame(allPenguins, 10);
 };
 
 ui.onPowerChange = (power) => {
@@ -376,7 +376,7 @@ ui.onRestart = () => {
         playerColors[id] = SCARF_COLORS[i];
     }
 
-    gameState.startGame(allPenguins, 3);
+    gameState.startGame(allPenguins, 10);
 };
 
 function syncMeshes() {
@@ -448,10 +448,12 @@ network.onRoomList = (rooms) => {
 };
 
 network.onRoomCreated = (code) => {
+    network.stopRoomPolling();
     ui.showLobby(code);
 };
 
 network.onRoomJoined = (code) => {
+    network.stopRoomPolling();
     ui.showLobby(code);
 };
 

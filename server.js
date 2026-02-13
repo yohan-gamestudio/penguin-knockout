@@ -9,10 +9,26 @@ const io = new Server(server);
 
 app.use(express.static('.'));
 
+app.get('/api/rooms', (req, res) => {
+    const roomList = [];
+    rooms.forEach((room, code) => {
+        const hostPlayer = room.players.get(room.hostId);
+        roomList.push({
+            roomCode: code,
+            playerCount: room.players.size,
+            maxPlayers: 4,
+            state: room.state,
+            hasPassword: !!room.password,
+            hostName: hostPlayer ? hostPlayer.name : ''
+        });
+    });
+    res.json(roomList);
+});
+
 const rooms = new Map();
 const sessions = new Map(); // sessionToken -> { socketId, roomCode, playerName }
 const RECONNECT_GRACE_MS = 30000;
-const DEFAULT_MAX_ROUNDS = 3;
+const DEFAULT_MAX_ROUNDS = 10;
 const MAX_TURNS_PER_ROUND = 30;
 
 function generateRoomCode() {
