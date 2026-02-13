@@ -32,6 +32,7 @@ export class GameState {
         this.gameOverDelay = 0;
         this.gameOverDelayDuration = 2.0;
         this.gameOverPending = false;
+        this.turnFallOrder = [];
 
         this.onStateChange = null;
         this.multiplayer = false;
@@ -94,6 +95,7 @@ export class GameState {
 
             case States.SLIDING:
                 this.slidingTimer += dt;
+                this.trackFalls(physics);
                 if (this.gameOverPending) {
                     this.gameOverDelay += dt;
                     if (this.gameOverDelay >= this.gameOverDelayDuration) {
@@ -129,40 +131,56 @@ export class GameState {
 
     startSliding() {
         this.slidingTimer = 0;
+        this.turnFallOrder = [];
         this.transition(States.SLIDING);
     }
 
-    checkEliminations(physics, network = null) {
-        const eliminated = [];
+    trackFalls(physics) {
         for (const p of this.penguins) {
             if (!p.alive) continue;
             if (!physics.isOnPlatform(p.body)) {
                 p.alive = false;
-                if (this.multiplayer && p.penguinIndex !== undefined) {
-                    eliminated.push(p.penguinIndex);
-                }
+                this.turnFallOrder.push(p);
             }
         }
+    }
+
+    checkEliminations(physics, network = null) {
+        // Final check for any last-frame falls
+        this.trackFalls(physics);
 
         if (this.multiplayer && network) {
+            // Send eliminated indices in fall order (first fallen first)
+            const eliminated = this.turnFallOrder
+                .filter(p => p.penguinIndex !== undefined)
+                .map(p => p.penguinIndex);
             if (network.isHost) {
                 network.reportRoundResults(eliminated);
             }
+            this.turnFallOrder = [];
             this.state = States.SLIDING;
         } else {
             const alive = this.penguins.filter(p => p.alive);
             if (alive.length <= 1) {
-                // Round over - record winner
+                let winner;
                 if (alive.length === 1) {
-                    this.roundWinner = alive[0];
-                    const id = alive[0].id || alive[0].playerId || String(alive[0].penguinIndex);
+                    winner = alive[0];
+                } else if (this.turnFallOrder.length > 0) {
+                    // All eliminated - last to fall wins (no draws)
+                    winner = this.turnFallOrder[this.turnFallOrder.length - 1];
+                }
+                if (winner) {
+                    this.roundWinner = winner;
+                    const id = winner.id || winner.playerId || String(winner.penguinIndex);
                     this.scores[id] = (this.scores[id] || 0) + 1;
                 }
                 this.gameOverPending = true;
                 this.gameOverDelay = 0;
                 this.roundEndTimer = 0;
+                this.turnFallOrder = [];
                 this.transition(States.SLIDING);
             } else {
+                this.turnFallOrder = [];
                 this.startNewTurn();
             }
         }
@@ -207,5 +225,6 @@ export class GameState {
         this.gameOverPending = false;
         this.gameOverDelay = 0;
         this.roundEndTimer = 0;
+        this.turnFallOrder = [];
     }
 }

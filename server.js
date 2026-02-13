@@ -389,12 +389,15 @@ io.on('connection', (socket) => {
         if (room.state !== 'round_sliding') return;
         if (socket.id !== room.hostId) return;
 
-        room.players.forEach(p => {
-            if (eliminatedIndices.includes(p.penguinIndex)) {
-                p.alive = false;
-                room.eliminationOrder.push({ name: p.name, penguinIndex: p.penguinIndex });
-            }
-        });
+        // Process eliminations in fall order (first fallen first)
+        for (const idx of eliminatedIndices) {
+            room.players.forEach((p) => {
+                if (p.penguinIndex === idx && p.alive) {
+                    p.alive = false;
+                    room.eliminationOrder.push({ name: p.name, penguinIndex: p.penguinIndex });
+                }
+            });
+        }
 
         let aliveCount = 0;
         let lastAlive = null;
@@ -406,8 +409,19 @@ io.on('connection', (socket) => {
         });
 
         if (aliveCount <= 1) {
-            // Round over
             let roundWinner = lastAlive;
+
+            // If no one alive, last to fall wins (no draws)
+            if (!roundWinner && eliminatedIndices.length > 0) {
+                const lastFallenIdx = eliminatedIndices[eliminatedIndices.length - 1];
+                room.players.forEach((p, id) => {
+                    if (p.penguinIndex === lastFallenIdx) {
+                        p.alive = true;
+                        roundWinner = { id, name: p.name, penguinIndex: p.penguinIndex };
+                    }
+                });
+            }
+
             if (roundWinner) {
                 room.scores[roundWinner.id] = (room.scores[roundWinner.id] || 0) + 1;
             }
