@@ -39,28 +39,6 @@ function generateRoomCode() {
     return code;
 }
 
-function broadcastRoomList() {
-    const roomList = [];
-    rooms.forEach((room, code) => {
-        let hostName = '';
-        room.players.forEach(p => {
-            if (!hostName) hostName = p.name;
-        });
-        const hostPlayer = room.players.get(room.hostId);
-        if (hostPlayer) hostName = hostPlayer.name;
-
-        roomList.push({
-            roomCode: code,
-            playerCount: room.players.size,
-            maxPlayers: 4,
-            state: room.state,
-            hasPassword: !!room.password,
-            hostName
-        });
-    });
-    io.emit('room-list', roomList);
-}
-
 function broadcastRoomUpdate(roomCode) {
     const room = rooms.get(roomCode);
     if (!room) return;
@@ -103,7 +81,7 @@ function removePlayerFromRoom(socketId, roomCode) {
 
     if (room.players.size === 0) {
         rooms.delete(roomCode);
-        broadcastRoomList();
+
         console.log(`Room ${roomCode} deleted (empty)`);
     } else {
         if (room.hostId === socketId) {
@@ -115,7 +93,7 @@ function removePlayerFromRoom(socketId, roomCode) {
             }
         }
         broadcastRoomUpdate(roomCode);
-        broadcastRoomList();
+
 
         // Check active (non-disconnected) player count for game state
         let activeCount = 0;
@@ -180,22 +158,6 @@ io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
     let currentRoom = null;
 
-    socket.on('get-rooms', () => {
-        const roomList = [];
-        rooms.forEach((room, code) => {
-            const hostPlayer = room.players.get(room.hostId);
-            roomList.push({
-                roomCode: code,
-                playerCount: room.players.size,
-                maxPlayers: 4,
-                state: room.state,
-                hasPassword: !!room.password,
-                hostName: hostPlayer ? hostPlayer.name : ''
-            });
-        });
-        socket.emit('room-list', roomList);
-    });
-
     socket.on('create-room', ({ name, password }) => {
         const code = generateRoomCode();
         const token = crypto.randomUUID();
@@ -221,7 +183,7 @@ io.on('connection', (socket) => {
         socket.join(code);
         socket.emit('room-created', { roomCode: code, sessionToken: token });
         broadcastRoomUpdate(code);
-        broadcastRoomList();
+
         console.log(`Room ${code} created by ${name}`);
     });
 
@@ -255,7 +217,7 @@ io.on('connection', (socket) => {
         socket.join(roomCode);
         socket.emit('room-joined', { roomCode, sessionToken: token });
         broadcastRoomUpdate(roomCode);
-        broadcastRoomList();
+
         console.log(`${name} joined room ${roomCode}`);
     });
 
@@ -375,7 +337,7 @@ io.on('connection', (socket) => {
 
             room.lastEvent = { type: 'game-start', data: { players: playerList, maxRounds: room.maxRounds } };
             io.to(currentRoom).emit('game-start', { players: playerList, maxRounds: room.maxRounds });
-            broadcastRoomList();
+    
 
             setTimeout(() => {
                 startNewRound(currentRoom);
@@ -545,7 +507,7 @@ io.on('connection', (socket) => {
             broadcastRoomUpdate(currentRoom);
         }
 
-        broadcastRoomList();
+
         currentRoom = null;
         console.log(`Player ${socket.id} left room`);
     });
@@ -578,7 +540,7 @@ io.on('connection', (socket) => {
         toRemove.forEach(id => room.players.delete(id));
 
         broadcastRoomUpdate(currentRoom);
-        broadcastRoomList();
+
     });
 
     socket.on('disconnect', () => {

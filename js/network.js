@@ -68,10 +68,6 @@ export class NetworkManager {
             if (this.onJoinError) this.onJoinError(message);
         });
 
-        this.socket.on('room-list', (data) => {
-            if (this.onRoomList) this.onRoomList(data);
-        });
-
         this.socket.on('room-update', (data) => {
             this.players = data.players;
             this.isHost = data.hostId === this.myId;
